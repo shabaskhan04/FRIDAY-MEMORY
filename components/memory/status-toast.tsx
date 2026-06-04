@@ -1,11 +1,11 @@
 "use client";
 
-import { CheckCircle2, AlertCircle, X, Sparkles, Users } from "lucide-react";
+import { CheckCircle2, AlertCircle, AlertTriangle, X, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 interface StatusMessage {
-  type: "success" | "error";
+  type: "success" | "error" | "warning";
   text: string;
   temporalCount?: number;
   entityCount?: number;
@@ -28,6 +28,43 @@ export function StatusToast({ status, onDismiss }: StatusToastProps) {
     return () => clearTimeout(timer);
   }, [onDismiss]);
 
+  const colors = {
+    success: {
+      border: "border-success/30",
+      bg: "bg-success/10",
+      icon: "bg-success/20 text-success",
+      text: "text-success",
+    },
+    error: {
+      border: "border-destructive/30",
+      bg: "bg-destructive/10",
+      icon: "bg-destructive/20 text-destructive",
+      text: "text-destructive",
+    },
+    warning: {
+      border: "border-warning/30",
+      bg: "bg-warning/10",
+      icon: "bg-warning/20 text-warning",
+      text: "text-warning",
+    },
+  };
+
+  const style = colors[status.type];
+
+  const titles = {
+    success: "Memory Committed",
+    error: "Error",
+    warning: "Warning",
+  };
+
+  const icons = {
+    success: CheckCircle2,
+    error: AlertCircle,
+    warning: AlertTriangle,
+  };
+
+  const Icon = icons[status.type];
+
   return (
     <div
       className={cn(
@@ -40,9 +77,8 @@ export function StatusToast({ status, onDismiss }: StatusToastProps) {
       <div
         className={cn(
           "relative overflow-hidden rounded-xl border p-4 shadow-2xl backdrop-blur-xl",
-          status.type === "success"
-            ? "border-success/30 bg-success/10"
-            : "border-destructive/30 bg-destructive/10"
+          style.border,
+          style.bg
         )}
       >
         <button
@@ -59,26 +95,15 @@ export function StatusToast({ status, onDismiss }: StatusToastProps) {
           <div
             className={cn(
               "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-              status.type === "success"
-                ? "bg-success/20 text-success"
-                : "bg-destructive/20 text-destructive"
+              style.icon
             )}
           >
-            {status.type === "success" ? (
-              <CheckCircle2 className="h-5 w-5" />
-            ) : (
-              <AlertCircle className="h-5 w-5" />
-            )}
+            <Icon className="h-5 w-5" />
           </div>
           
           <div className="flex flex-col gap-1 pr-6">
-            <span
-              className={cn(
-                "text-sm font-semibold",
-                status.type === "success" ? "text-success" : "text-destructive"
-              )}
-            >
-              {status.type === "success" ? "Memory Committed" : "Error"}
+            <span className={cn("text-sm font-semibold", style.text)}>
+              {titles[status.type]}
             </span>
             <span className="text-sm text-muted-foreground">
               {status.text}
@@ -107,8 +132,8 @@ export function StatusToast({ status, onDismiss }: StatusToastProps) {
         <div className="absolute bottom-0 left-0 right-0 h-1 overflow-hidden bg-background/20">
           <div
             className={cn(
-              "h-full animate-[shrink_5s_linear_forwards]",
-              status.type === "success" ? "bg-success" : "bg-destructive"
+              "h-full",
+              status.type === "success" ? "bg-success" : status.type === "warning" ? "bg-warning" : "bg-destructive"
             )}
             style={{
               animation: "shrink 5s linear forwards",

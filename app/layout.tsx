@@ -19,8 +19,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="bg-background">
-      <body className="min-h-screen">{children}</body>
+    <html lang="en" className="bg-background" suppressHydrationWarning>
+      <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
 }

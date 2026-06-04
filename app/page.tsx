@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { isSupabaseConfigured, createClient } from "@/lib/supabase";
 import { Header } from "@/components/memory/header";
 import { MemoryInput } from "@/components/memory/memory-input";
 import { StatusToast } from "@/components/memory/status-toast";
@@ -16,7 +16,7 @@ interface RawLedger {
 }
 
 interface StatusMessage {
-  type: "success" | "error";
+  type: "success" | "error" | "warning";
   text: string;
   temporalCount?: number;
   entityCount?: number;
@@ -27,23 +27,38 @@ export default function CognitiveRouter() {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-
-  const supabase = createClient();
+  
+  const isConfigured = useMemo(() => isSupabaseConfigured(), []);
 
   const fetchLedgers = useCallback(async (): Promise<void> => {
-    const { data, error } = await supabase
-      .from("raw_ledgers")
-      .select("id, created_at, content")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    if (!error && data) setLedgers(data as RawLedger[]);
-  }, [supabase]);
+    if (!isConfigured) return;
+    
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("raw_ledgers")
+        .select("id, created_at, content")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (!error && data) setLedgers(data as RawLedger[]);
+    } catch {
+      // Supabase not configured, ignore
+    }
+  }, [isConfigured]);
 
   useEffect(() => {
     void fetchLedgers();
   }, [fetchLedgers]);
 
   const handleSubmit = async (content: string): Promise<void> => {
+    if (!isConfigured) {
+      setStatus({
+        type: "warning",
+        text: "Supabase is not configured. Connect Supabase from Settings to enable memory storage.",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     setStatus(null);
 
@@ -90,7 +105,7 @@ export default function CognitiveRouter() {
         <div className="absolute left-0 bottom-0 h-[400px] w-[400px] bg-blue-500/5 blur-[100px] rounded-full" />
       </div>
       
-      <Header isOnline />
+      <Header isOnline={isConfigured} />
       
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
         {/* Hero section */}
@@ -103,6 +118,25 @@ export default function CognitiveRouter() {
             Speak or type — the AI will classify and commit everything to your personal ledger.
           </p>
         </div>
+        
+        {/* Setup banner if not configured */}
+        {!isConfigured && (
+          <div className="mb-8 rounded-lg border border-warning/30 bg-warning/5 p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-warning/10 p-2">
+                <svg className="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-medium text-warning">Supabase not connected</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Connect Supabase from the Settings menu to enable memory storage and retrieval.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Stats */}
         <div className="mb-8">
