@@ -16,9 +16,11 @@ import { PersonProfile } from "@/components/memory/person-profile";
 import { InsightsView } from "@/components/memory/insights-view";
 import { MemoryTab } from "@/components/memory/memory-tab";
 
+import { HealthView } from "@/components/memory/health-view";
+
 import { LocationData } from "@/components/memory/memory-input";
 
-type TabId = "home" | "memory" | "people" | "todos" | "insights";
+type TabId = "home" | "memory" | "people" | "todos" | "insights" | "health";
 
 interface RawLedger {
   id: string;
@@ -235,6 +237,7 @@ export default function CognitiveRouter() {
     people: selectedPerson ? selectedPerson : "People",
     todos: "To-Do",
     insights: "Insights",
+    health: "Health",
   };
 
   return (
@@ -346,6 +349,17 @@ export default function CognitiveRouter() {
               <p className="text-xs text-muted-foreground mt-0.5">Your memory analytics</p>
             </div>
             <InsightsView isConfigured={isConfigured} />
+          </section>
+        )}
+
+        {/* ── HEALTH TAB ── */}
+        {activeTab === "health" && (
+          <section>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-foreground">Health</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Sleep, steps & body metrics</p>
+            </div>
+            <HealthView isConfigured={isConfigured} />
           </section>
         )}
       </main>

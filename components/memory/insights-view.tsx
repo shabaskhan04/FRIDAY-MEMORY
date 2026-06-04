@@ -120,7 +120,7 @@ export function InsightsView({ isConfigured }: InsightsViewProps) {
         {[
           { label: "Memories", value: data.total_memories, icon: FileText, color: "text-primary" },
           { label: "People", value: data.total_entities, icon: Users, color: "text-warning" },
-          { label: "Tasks", value: `${data.pending_todos}/${data.total_todos}`, icon: CheckSquare, color: "text-success" },
+          { label: "Tasks", value: `${data.total_todos - data.pending_todos}/${data.total_todos}`, icon: CheckSquare, color: "text-success" },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl glass-card p-3 text-center">
             <stat.icon className={cn("h-4 w-4 mx-auto mb-1", stat.color)} />
