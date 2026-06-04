@@ -95,7 +95,17 @@ export default function CognitiveRouter() {
 
   // ── Derived state ─────────────────────────────────────────
   const pendingTodos = todos.filter((t) => t.status === "pending");
-  const hasTodos = todos.length > 0;
+  // Only show the tab when there are pending tasks
+  const hasTodos = pendingTodos.length > 0;
+
+  // Auto-navigate away from todos tab when all tasks are done
+  useEffect(() => {
+    if (activeTab === "todos" && pendingTodos.length === 0 && todos.length > 0) {
+      // Small delay so the last item's exit animation can finish
+      const t = setTimeout(() => setActiveTab("home"), 500);
+      return () => clearTimeout(t);
+    }
+  }, [pendingTodos.length, todos.length, activeTab]);
 
   // ── Handle memory submit ──────────────────────────────────
   const handleSubmit = async (

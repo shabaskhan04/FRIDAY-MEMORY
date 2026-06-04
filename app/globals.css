@@ -72,6 +72,29 @@ body {
   border-radius: 2px;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}
+
+@utility animate-shake {
+  animation: shake 0.45s ease-in-out;
+}
+
+@keyframes fade-out-shrink {
+  0%   { opacity: 1; transform: scale(1);    max-height: 120px; margin-bottom: 0.5rem; }
+  50%  { opacity: 0; transform: scale(0.95); max-height: 60px;  }
+  100% { opacity: 0; transform: scale(0.9);  max-height: 0;     margin-bottom: 0; padding: 0; overflow: hidden; }
+}
+
+@utility animate-fade-out-shrink {
+  animation: fade-out-shrink 0.4s ease-in forwards;
+  pointer-events: none;
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
