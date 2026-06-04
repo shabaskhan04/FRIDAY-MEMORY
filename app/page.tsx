@@ -95,6 +95,19 @@ export default function CognitiveRouter() {
     void fetchTodos();
   }, [fetchLedgers, fetchTodos]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const launchTab = params.get("tab");
+    const action = params.get("action");
+    const validTabs: TabId[] = ["home", "memory", "people", "todos", "insights", "health"];
+
+    if (launchTab && validTabs.includes(launchTab as TabId)) {
+      setActiveTab(launchTab as TabId);
+    } else if (action === "capture") {
+      setActiveTab("home");
+    }
+  }, []);
+
   // ── Derived state ─────────────────────────────────────────
   const pendingTodos = todos.filter((t) => t.status === "pending");
   // Only show the tab when there are pending tasks
