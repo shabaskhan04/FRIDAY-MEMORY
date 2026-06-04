@@ -26,10 +26,26 @@ interface StatusMessage {
   text: string;
 }
 
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: { length: number; isFinal: boolean; [index: number]: { transcript: string }[] & { isFinal: boolean } };
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+}
+
 declare global {
   interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
   }
 }
 
@@ -461,7 +477,7 @@ export default function CognitiveRouter() {
   const [status, setStatus] = useState<StatusMessage | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   const supabase = createClient();
 
@@ -503,8 +519,8 @@ export default function CognitiveRouter() {
     };
 
     recognition.onend = (): void => setIsRecording(false);
-    recognition.onerror = (e: SpeechRecognitionErrorEvent): void => {
-      console.warn("[SpeechRecognition]", e.error);
+    recognition.onerror = (e: Event): void => {
+      console.warn("[SpeechRecognition]", (e as Event & { error?: string }).error);
       setIsRecording(false);
     };
 
