@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase";
 import { Header } from "@/components/memory/header";
+import { GreetingCard } from "@/components/memory/greeting-card";
+import { StatsRow } from "@/components/memory/stats-row";
 import { MemoryInput } from "@/components/memory/memory-input";
 import { StatusToast } from "@/components/memory/status-toast";
 import { LedgerList } from "@/components/memory/ledger-list";
-import { SectionHeader } from "@/components/memory/section-header";
-import { StatsCards } from "@/components/memory/stats-cards";
+import { BottomNav } from "@/components/memory/bottom-nav";
+import { QuickActions } from "@/components/memory/quick-actions";
 
 interface RawLedger {
   id: string;
@@ -27,6 +29,7 @@ export default function CognitiveRouter() {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [activeTab, setActiveTab] = useState<"home" | "memory" | "insights">("home");
   
   const isConfigured = useMemo(() => isSupabaseConfigured(), []);
 
@@ -54,7 +57,7 @@ export default function CognitiveRouter() {
     if (!isConfigured) {
       setStatus({
         type: "warning",
-        text: "Supabase is not configured. Connect Supabase from Settings to enable memory storage.",
+        text: "Connect Supabase from Settings to enable memory storage.",
       });
       return;
     }
@@ -80,7 +83,7 @@ export default function CognitiveRouter() {
 
       setStatus({
         type: "success",
-        text: "Memory successfully processed and stored.",
+        text: "Memory processed and stored",
         temporalCount: data.temporal_count ?? 0,
         entityCount: data.entity_count ?? 0,
       });
@@ -96,102 +99,61 @@ export default function CognitiveRouter() {
     }
   };
 
+  const handleQuickAction = (action: string) => {
+    // Handle quick actions - could pre-fill prompts or navigate
+    console.log("Quick action:", action);
+  };
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24">
       {/* Background gradient */}
-      <div className="fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
-        <div className="absolute right-0 top-0 h-[500px] w-[500px] bg-primary/5 blur-[120px] rounded-full" />
-        <div className="absolute left-0 bottom-0 h-[400px] w-[400px] bg-blue-500/5 blur-[100px] rounded-full" />
+      <div className="fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-1/2 left-1/2 h-[800px] w-[800px] -translate-x-1/2 rounded-full bg-primary/8 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-[400px] w-[400px] rounded-full bg-purple-600/5 blur-[100px]" />
       </div>
       
       <Header isOnline={isConfigured} />
       
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
-        {/* Hero section */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Cognitive Memory Router
-          </h1>
-          <p className="mt-3 text-base text-muted-foreground max-w-2xl mx-auto">
-            Transform unstructured thoughts into structured temporal memories and entity records. 
-            Speak or type — the AI will classify and commit everything to your personal ledger.
-          </p>
-        </div>
+      <main className="mx-auto max-w-lg px-4 pt-4">
+        {/* Greeting Card */}
+        <GreetingCard 
+          isConfigured={isConfigured} 
+          isRecording={isRecording}
+          isProcessing={isLoading}
+        />
         
-        {/* Setup banner if not configured */}
-        {!isConfigured && (
-          <div className="mb-8 rounded-lg border border-warning/30 bg-warning/5 p-4">
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-warning/10 p-2">
-                <svg className="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-medium text-warning">Supabase not connected</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Connect Supabase from the Settings menu to enable memory storage and retrieval.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Stats Row */}
+        <StatsRow 
+          totalEntries={ledgers.length}
+          isProcessing={isLoading}
+        />
         
-        {/* Stats */}
-        <div className="mb-8">
-          <StatsCards 
-            totalEntries={ledgers.length} 
-            isRecording={isRecording}
-            isProcessing={isLoading}
+        {/* Memory Input */}
+        <div className="mb-6">
+          <MemoryInput 
+            onSubmit={handleSubmit} 
+            isLoading={isLoading}
+            onRecordingChange={setIsRecording}
           />
         </div>
         
-        {/* Input section */}
-        <section className="mb-12">
-          <SectionHeader 
-            title="Memory Input" 
-            subtitle="Voice or text transcription"
-            icon="brain"
-          />
-          <div className="mt-4">
-            <MemoryInput 
-              onSubmit={handleSubmit} 
-              isLoading={isLoading}
-              onRecordingChange={setIsRecording}
-            />
-          </div>
-        </section>
+        {/* Quick Actions */}
+        <QuickActions onAction={handleQuickAction} />
         
-        {/* Ledger section */}
-        <section>
-          <SectionHeader 
-            title="Raw Linear Notebook" 
-            subtitle="Latest committed entries"
-            count={ledgers.length}
-            icon="database"
-          />
-          <div className="mt-4">
-            <LedgerList ledgers={ledgers} />
+        {/* Memory History */}
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-foreground">Recent Memories</h2>
+            {ledgers.length > 0 && (
+              <span className="text-xs text-muted-foreground">See all</span>
+            )}
           </div>
+          <LedgerList ledgers={ledgers} />
         </section>
       </main>
       
-      {/* Footer */}
-      <footer className="border-t border-border/50 bg-background/50 backdrop-blur-sm">
-        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="font-mono text-xs">FRIDAY MEMORY</span>
-              <span className="text-border">•</span>
-              <span>Layer 1 Ingestion Protocol</span>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
-              <span>Powered by Groq + Supabase</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Bottom Navigation */}
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       
       {/* Status toast */}
       {status && (

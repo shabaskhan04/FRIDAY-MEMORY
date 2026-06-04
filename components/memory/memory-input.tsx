@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, MicOff, Loader2, Send, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Mic, MicOff, Loader2, Send, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SpeechRecognitionEvent extends Event {
@@ -43,7 +41,8 @@ export function MemoryInput({ onSubmit, isLoading, onRecordingChange }: MemoryIn
   const [content, setContent] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   useEffect(() => {
@@ -82,11 +81,6 @@ export function MemoryInput({ onSubmit, isLoading, onRecordingChange }: MemoryIn
     recognitionRef.current = recognition;
   }, [onRecordingChange]);
 
-  useEffect(() => {
-    const t = setTimeout(() => textareaRef.current?.focus(), 150);
-    return () => clearTimeout(t);
-  }, []);
-
   const toggleRecording = useCallback(() => {
     if (!recognitionRef.current) return;
     
@@ -114,91 +108,86 @@ export function MemoryInput({ onSubmit, isLoading, onRecordingChange }: MemoryIn
     setContent("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSubmit();
     }
   };
 
   return (
-    <div className="relative rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm p-1 transition-all duration-300 focus-within:border-primary/30 focus-within:shadow-lg focus-within:shadow-primary/5">
-      <div className="relative">
-        <Textarea
-          ref={textareaRef}
+    <div 
+      className={cn(
+        "rounded-2xl glass-card p-2 transition-all duration-200",
+        isFocused && "ring-1 ring-primary/30",
+        isRecording && "ring-1 ring-destructive/30"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        {/* Add/Record Button */}
+        {speechSupported && (
+          <button
+            type="button"
+            onClick={toggleRecording}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+              isRecording 
+                ? "bg-destructive text-destructive-foreground" 
+                : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+            )}
+          >
+            {isRecording ? (
+              <MicOff className="h-5 w-5" />
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
+          </button>
+        )}
+        
+        {/* Input Field */}
+        <input
+          ref={inputRef}
+          type="text"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           disabled={isLoading}
-          placeholder="Begin transcription. Mix past memories, present observations, and future intentions. Mention people freely — the router will extract, classify, and commit everything to the ledger..."
-          className="min-h-[180px] border-0 bg-transparent text-base leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 resize-none placeholder:text-muted-foreground/50"
+          placeholder={isRecording ? "Listening..." : "Enter a memory..."}
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
         
-        {isRecording && (
-          <div className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-            </span>
-            Recording
-          </div>
-        )}
+        {/* Submit Button */}
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={!content.trim() || isLoading}
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+            content.trim() && !isLoading
+              ? "gradient-purple text-white"
+              : "bg-secondary text-muted-foreground"
+          )}
+        >
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Plus className="h-5 w-5" />
+          )}
+        </button>
       </div>
       
-      <div className="flex items-center justify-between gap-3 border-t border-border/30 p-3">
-        <div className="flex items-center gap-2">
-          {speechSupported && (
-            <Button
-              type="button"
-              variant={isRecording ? "destructive" : "outline"}
-              size="icon"
-              onClick={toggleRecording}
-              className={cn(
-                "relative h-10 w-10 rounded-full transition-all duration-200",
-                isRecording && "animate-pulse"
-              )}
-            >
-              {isRecording ? (
-                <MicOff className="h-4 w-4" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
-              {isRecording && (
-                <span className="absolute inset-0 rounded-full border border-destructive animate-pulse-ring" />
-              )}
-            </Button>
-          )}
-          <span className="text-xs text-muted-foreground font-mono">
-            {content.length.toLocaleString()} chars
+      {/* Recording Indicator */}
+      {isRecording && (
+        <div className="mt-2 flex items-center gap-2 px-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
           </span>
+          <span className="text-xs text-destructive">Recording...</span>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-xs text-muted-foreground">
-            ⌘ + Enter to commit
-          </span>
-          <Button
-            onClick={() => void handleSubmit()}
-            disabled={!content.trim() || isLoading}
-            variant="glow"
-            size="lg"
-            className="relative overflow-hidden"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Processing</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                <span>Commit to Memory</span>
-                <Send className="h-4 w-4" />
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

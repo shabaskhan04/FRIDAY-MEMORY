@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, Zap } from "lucide-react";
+import { Settings, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -9,43 +9,37 @@ interface HeaderProps {
 
 export function Header({ isOnline = true }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
-            <Brain className="h-5 w-5 text-primary" />
-            <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
-              Friday
-            </span>
-            <span className="text-sm font-semibold text-foreground">
-              Memory Protocol
-            </span>
-          </div>
+    <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold text-foreground">Friday</span>
+          <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
+            BETA
+          </span>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <div
             className={cn(
-              "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium",
+              "mr-2 flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium",
               isOnline
-                ? "bg-success/10 text-success border border-success/20"
-                : "bg-destructive/10 text-destructive border border-destructive/20"
+                ? "bg-success/10 text-success"
+                : "bg-destructive/10 text-destructive"
             )}
           >
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                isOnline ? "bg-success animate-pulse" : "bg-destructive"
-              )}
-            />
-            <span className="hidden sm:inline">
-              {isOnline ? "System Online" : "Offline"}
-            </span>
-            <Zap className="h-3 w-3 sm:hidden" />
+            <span className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              isOnline ? "bg-success animate-pulse-soft" : "bg-destructive"
+            )} />
+            {isOnline ? "Online" : "Offline"}
           </div>
+          
+          <button className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+            <Bell className="h-5 w-5" />
+          </button>
+          <button className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+            <Settings className="h-5 w-5" />
+          </button>
         </div>
       </div>
     </header>

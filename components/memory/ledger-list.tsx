@@ -1,8 +1,6 @@
 "use client";
 
-import { Clock, Calendar, Layers, BookOpen } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Clock, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface RawLedger {
@@ -13,20 +11,9 @@ interface RawLedger {
 
 interface LedgerListProps {
   ledgers: RawLedger[];
-  isLoading?: boolean;
 }
 
-export function LedgerList({ ledgers, isLoading }: LedgerListProps) {
-  const formatTs = (iso: string): string =>
-    new Date(iso).toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-
+export function LedgerList({ ledgers }: LedgerListProps) {
   const getRelativeTime = (iso: string): string => {
     const now = new Date();
     const date = new Date(iso);
@@ -43,13 +30,13 @@ export function LedgerList({ ledgers, isLoading }: LedgerListProps) {
 
   if (ledgers.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 border border-dashed border-border">
-          <BookOpen className="h-7 w-7 text-muted-foreground/50" />
+      <div className="rounded-2xl glass-card p-6 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+          <Clock className="h-5 w-5 text-muted-foreground" />
         </div>
-        <h3 className="text-sm font-medium text-muted-foreground">No entries yet</h3>
+        <p className="text-sm text-muted-foreground">No memories yet</p>
         <p className="mt-1 text-xs text-muted-foreground/70">
-          Committed memories will appear here
+          Your memories will appear here
         </p>
       </div>
     );
@@ -58,51 +45,39 @@ export function LedgerList({ ledgers, isLoading }: LedgerListProps) {
   return (
     <div className="space-y-3">
       {ledgers.map((ledger, index) => (
-        <Card
+        <div
           key={ledger.id}
           className={cn(
-            "group relative overflow-hidden border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-primary/20 hover:bg-card/80",
-            "animate-fade-up"
+            "rounded-2xl glass-card p-4 transition-all duration-300 hover:glass-card-hover animate-fade-up"
           )}
           style={{ animationDelay: `${index * 50}ms` }}
         >
-          {/* Gradient accent */}
-          <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary/50 via-primary/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-          
-          <div className="p-4 sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1.5 font-mono text-[10px]">
-                  <Clock className="h-3 w-3" />
-                  {getRelativeTime(ledger.created_at)}
-                </Badge>
-                <Badge variant="secondary" className="gap-1.5 font-mono text-[10px]">
-                  <Layers className="h-3 w-3" />
-                  Raw Entry
-                </Badge>
-              </div>
-              <span className="font-mono text-[10px] text-muted-foreground/50 hidden sm:block">
-                {ledger.id.slice(0, 8)}
-              </span>
+          <div className="flex items-start gap-3">
+            {/* Icon */}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Clock className="h-4 w-4 text-primary" />
             </div>
             
-            <p className="text-sm leading-relaxed text-foreground/80 line-clamp-3">
-              {ledger.content}
-            </p>
-            
-            <div className="mt-3 flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
-              <Calendar className="h-3 w-3" />
-              <span className="font-mono">{formatTs(ledger.created_at)}</span>
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                  Memory
+                </span>
+                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                  <Info className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-sm text-foreground line-clamp-2 leading-relaxed">
+                {ledger.content}
+              </p>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {getRelativeTime(ledger.created_at)}
+              </p>
             </div>
           </div>
-        </Card>
-      ))}
-      
-      {isLoading && (
-        <div className="flex justify-center py-4">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
-      )}
+      ))}
     </div>
   );
 }
