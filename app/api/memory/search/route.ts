@@ -1,70 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
+import { analyzeQuery } from "@/lib/queryAnalyzer";
 
 export const runtime = "nodejs";
+
+const EMBEDDING_MODEL      = "text-embedding-3-small";
+const EMBEDDING_DIMENSIONS = 1536;
+const ENTITY_BOOST         = 0.4;
 
 interface SearchRequestBody {
   query?: string;
   limit?: number;
+  debug?: boolean;
 }
 
-interface OpenAIEmbeddingResponse {
-  data: Array<{ embedding: number[] }>;
-}
-
-interface SemanticMemoryRow {
+export interface HybridMemoryRow {
   id: string;
-  raw_ledger_id: string;
   content: string;
   created_at: string;
   intent_tag: string | null;
   local_timezone: string | null;
   location_text: string | null;
-  similarity: number;
+  semantic_score: number;
+  keyword_score: number;
+  entity_score: number;
+  recency_score: number;
+  final_score: number;
+  similarity: number;          // alias of final_score — keeps UI compat
+  matched_entities: string[];
 }
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMENSIONS = 1536;
+/**
+ * Flat 2-tier recency scoring for lifelong memory.
+ * Memories from the last 30 days get a slight boost (1.0),
+ * while all older memories remain highly accessible (0.9).
+ * No memory ever decays below 0.9.
+ *
+ * Note: recency_score is computed by the SQL RPC (match_memories_hybrid).
+ * This function is the canonical TypeScript reference and is used when
+ * recency must be calculated outside the SQL layer (e.g. unit tests,
+ * future in-memory pipelines).
+ */
+export function recencyScore(createdAt: string | Date): number {
+  const days = (Date.now() - new Date(createdAt).getTime()) / (1000 * 3600 * 24);
+  return days < 30 ? 1.0 : 0.9;
+}
 
 function normalizeLimit(limit: unknown): number {
   if (typeof limit !== "number" || !Number.isFinite(limit)) return 20;
   return Math.min(Math.max(Math.floor(limit), 1), 50);
 }
 
-function toVectorLiteral(vector: number[]): string {
-  return `[${vector.join(",")}]`;
+function toVectorLiteral(v: number[]): string {
+  return `[${v.join(",")}]`;
 }
 
 async function generateQueryEmbedding(query: string): Promise<number[]> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
   const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: query,
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMBEDDING_MODEL, input: query }),
     signal: AbortSignal.timeout(20_000),
   });
 
   if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI embedding request failed: ${response.status} ${errorBody}`);
+    const err = await response.text().catch(() => "");
+    throw new Error(`OpenAI embedding failed: ${response.status} ${err}`);
   }
 
-  const json = (await response.json()) as OpenAIEmbeddingResponse;
+  const json = await response.json() as { data: Array<{ embedding: number[] }> };
   const embedding = json.data[0]?.embedding;
   if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSIONS) {
-    throw new Error("OpenAI returned an invalid embedding vector.");
+    throw new Error("Invalid embedding returned.");
   }
-
   return embedding;
 }
 
@@ -77,38 +88,87 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const query = body.query?.trim() ?? "";
-  if (!query) {
-    return NextResponse.json({ memories: [] }, { status: 200 });
-  }
+  if (!query) return NextResponse.json({ memories: [] }, { status: 200 });
+
+  const limit = normalizeLimit(body.limit);
+  const debug = Boolean(body.debug);
 
   try {
-    const limit = normalizeLimit(body.limit);
-    const embedding = await generateQueryEmbedding(query);
     const supabase = createClient();
 
-    const { data, error } = await supabase.rpc("match_memories", {
+    // 1. Analyze query: type + entities + dynamic weights
+    const analysis = await analyzeQuery(query, supabase);
+    const { weights, entities } = analysis;
+
+    // 2. Embed the query
+    const embedding = await generateQueryEmbedding(query);
+
+    // 3. Call hybrid search RPC
+    // entity_weight is applied in app layer; pass it as 0 to SQL so we don't double-count
+    const { data, error } = await supabase.rpc("match_memories_hybrid", {
       query_embedding: toVectorLiteral(embedding),
-      match_count: limit,
+      query_text:      query,
+      semantic_weight: weights.semantic,
+      keyword_weight:  weights.keyword,
+      recency_weight:  weights.recency,
+      match_count:     Math.min(limit * 3, 50), // fetch extra for entity re-ranking
       match_threshold: -1,
     });
 
     if (error) {
-      console.error("[memory/search] match_memories RPC failed:", error);
-      return NextResponse.json(
-        {
-          error: "Semantic search is not ready.",
-          detail: error.message,
-        },
-        { status: 500 }
-      );
+      console.error("[memory/search] hybrid RPC failed:", error);
+      return NextResponse.json({ error: "Search failed.", detail: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(
-      { memories: (data ?? []) as SemanticMemoryRow[] },
-      { status: 200 }
-    );
+    type RpcRow = {
+      id: string; content: string; created_at: string;
+      intent_tag: string | null; local_timezone: string | null;
+      location_text: string | null;
+      semantic_score: number; keyword_score: number;
+      recency_score: number; final_score: number;
+    };
+
+    const rows = (data ?? []) as RpcRow[];
+
+    // 4. Apply entity boosting in app layer
+    const entityNames = entities.map((e) => e.name.toLowerCase());
+
+    const scored: HybridMemoryRow[] = rows.map((row) => {
+      const contentLower = row.content.toLowerCase();
+      const matched = entityNames.filter((n) => contentLower.includes(n));
+      const entityScore = Math.min(matched.length * ENTITY_BOOST, 1.0);
+
+      const finalScore =
+        row.semantic_score * weights.semantic +
+        row.keyword_score  * weights.keyword  +
+        entityScore        * weights.entity   +
+        row.recency_score  * weights.recency;
+
+      return {
+        ...row,
+        entity_score:    entityScore,
+        final_score:     finalScore,
+        similarity:      finalScore,  // kept for UI backwards compat
+        matched_entities: matched,
+      };
+    });
+
+    // Re-sort after entity boost, take final limit
+    scored.sort((a, b) => b.final_score - a.final_score);
+    const results = scored.slice(0, limit);
+
+    const response: Record<string, unknown> = { memories: results };
+    if (debug) {
+      response.query_analysis = {
+        query_type: analysis.queryType,
+        entities:   analysis.entities,
+        weights:    analysis.weights,
+      };
+    }
+
+    return NextResponse.json(response, { status: 200 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Semantic search failed.";
+    const message = err instanceof Error ? err.message : "Hybrid search failed.";
     console.error("[memory/search] error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
