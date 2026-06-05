@@ -165,7 +165,7 @@ async function generateEmbeddingHuggingFace(
     method: "POST",
     headers,
     body: JSON.stringify({ inputs: text }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(35_000),
   });
 
   if (!response.ok) {
