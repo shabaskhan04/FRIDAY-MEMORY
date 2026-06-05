@@ -521,12 +521,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const embeddingWritePromise: Promise<{ error: unknown }> =
     embeddingVector !== null
-      ? supabase.from("ledger_embeddings").insert({
-          raw_ledger_id: rawLedgerId,
-          // Supabase JS client accepts a JS number[] for vector columns
-          // when pgvector is installed and the column type is vector(n).
-          embedding: JSON.stringify(embeddingVector),
-        })
+      ? supabase
+          .from("ledger_embeddings")
+          .insert({
+            raw_ledger_id: rawLedgerId,
+            embedding: JSON.stringify(embeddingVector),
+          })
+          .then((res) => ({ error: res.error }))
       : Promise.resolve({ error: null });
 
   const temporalWritePromise: Promise<{ error: unknown }> =
