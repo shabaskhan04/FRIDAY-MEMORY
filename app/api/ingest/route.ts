@@ -40,7 +40,7 @@ interface IngestRequestBody {
 }
 
 // ============================================================
-// System prompt — v3: auto intent-tag detection
+// System prompt — v4: canonical name extraction
 // ============================================================
 
 const SYSTEM_PROMPT = `You are a cognitive routing engine. Take the user's unstructured transcript and extract it into a strict JSON schema. The user will mix past, present, and future events, mention people, and describe goals or actions.
@@ -49,6 +49,21 @@ Determine the intent_tag based on:
 - "spark": excited, inspired, creative, breakthrough, new idea, energized, happy
 - "friction": stressed, frustrated, worried, conflict, problem, issue, negative emotion
 - "standard": neutral, factual, informational, routine
+
+CRITICAL NAME RULES — follow these exactly:
+1. Extract the person's REAL NAME ONLY. Strip all role descriptors from the name field.
+   - "Shanavas Khan (father)" → name = "Shanavas Khan"
+   - "Shabeera (mother)" → name = "Shabeera"
+   - "my sister Sharmin" → name = "Sharmin"
+   - "Sharmin (sister)" → name = "Sharmin"
+2. Use the FULL name whenever available. If only a role word appears (dad, mom, sister) with no real name in the text, use that role as the name (e.g. "Dad").
+3. The relationship belongs in interaction_type and ledger_note — NEVER in the name field.
+4. If the same person is mentioned multiple times in the transcript, emit only ONE entity_update for them.
+5. interaction_type must be exactly: "family" | "friend" | "business" | "conflict"
+   - family: parents, siblings, spouse, relatives
+   - friend: peers, acquaintances
+   - business: colleagues, clients, professional contacts
+   - conflict: adversarial relationships
 
 Output EXACTLY this JSON format — no extra keys, no markdown:
 {
@@ -63,14 +78,14 @@ Output EXACTLY this JSON format — no extra keys, no markdown:
   ],
   "entity_updates": [
     {
-      "name": "Name of person or organisation",
-      "interaction_type": "business" | "friend" | "family" | "conflict",
+      "name": "Clean real name only — NO role suffixes like (father) or (sister)",
+      "interaction_type": "family" | "friend" | "business" | "conflict",
       "trust_signal": "positive" | "negative" | "neutral",
-      "ledger_note": "What was learned about this entity"
+      "ledger_note": "What was learned — include relationship context here e.g. 'Father, supportive and hardworking'"
     }
   ],
   "extracted_tasks": [
-    "A clean, direct, actionable to-do step parsed explicitly from the goals, requirements, or operational updates mentioned in the transcript. Each item must be a single self-contained action sentence. If no clear actions are detected, return an empty array []."
+    "A clean, direct, actionable to-do step. Each item must be a single self-contained action sentence. If no clear actions are detected, return an empty array []."
   ]
 }`;
 
@@ -79,6 +94,16 @@ Output EXACTLY this JSON format — no extra keys, no markdown:
 // ============================================================
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// ============================================================
+// Helper: strip role suffixes from AI-extracted names
+// (safety net in case the AI still returns "Name (role)")
+// ============================================================
+
+function canonicalizeName(raw: string): string {
+  // Remove parenthetical role suffixes: "Shanavas Khan (father)" -> "Shanavas Khan"
+  return raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
 
 // ============================================================
 // POST /api/ingest
@@ -114,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const supabase = createClient();
 
-  // ── 2. Groq — structured JSON extraction (v3 payload) ─────
+  // ── 2. Groq — structured JSON extraction ──────────────────
 
   let groqRawJson: string;
   try {
@@ -159,9 +184,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ? parsed.temporal_events
     : [];
 
-  const entityUpdates: EntityUpdate[] = Array.isArray(parsed.entity_updates)
+  // Canonicalize names — strip "(role)" suffixes the AI may have included,
+  // then deduplicate by canonical lowercase name within this single ingest
+  const rawEntityUpdates: EntityUpdate[] = Array.isArray(parsed.entity_updates)
     ? parsed.entity_updates
     : [];
+
+  const seenNames = new Set<string>();
+  const entityUpdates: EntityUpdate[] = [];
+  for (const e of rawEntityUpdates) {
+    const cleanName = canonicalizeName(e.name ?? "");
+    if (!cleanName) continue;
+    const key = cleanName.toLowerCase();
+    if (seenNames.has(key)) continue; // deduplicate within same ingest
+    seenNames.add(key);
+    entityUpdates.push({ ...e, name: cleanName });
+  }
 
   const extractedTasks: string[] = Array.isArray(parsed.extracted_tasks)
     ? parsed.extracted_tasks.filter(
@@ -169,9 +207,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     : [];
 
-  // ── 4. Immutable write → raw_ledgers (with all context) ──
+  // ── 4. Immutable write → raw_ledgers ──────────────────────
 
-  // Build insert payload — location columns are optional (added by migration)
   const ledgerInsert: Record<string, unknown> = {
     content,
     intent_tag: intentTag,
@@ -201,7 +238,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── 5. Concurrent writes: temporal + entity + tasks ────────
 
   const [temporalResult, entityResult, taskResult] = await Promise.all([
-    // Temporal memories
     temporalEvents.length > 0
       ? supabase.from("temporal_memories").insert(
           temporalEvents.map((e) => ({
@@ -214,7 +250,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         )
       : Promise.resolve({ error: null }),
 
-    // Entity ledger
     entityUpdates.length > 0
       ? supabase.from("entity_ledger").insert(
           entityUpdates.map((e) => ({
@@ -227,7 +262,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         )
       : Promise.resolve({ error: null }),
 
-    // To-do tasks — batch insert all extracted action steps
     extractedTasks.length > 0
       ? supabase.from("todo_tasks").insert(
           extractedTasks.map((task) => ({

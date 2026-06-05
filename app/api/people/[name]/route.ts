@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 
+// Strip role suffix for canonical matching
+function groupKey(name: string): string {
+  return name
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .toLowerCase()
+    .trim();
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
@@ -8,20 +16,29 @@ export async function GET(
   try {
     const { name } = await params;
     const decodedName = decodeURIComponent(name);
+    const canonicalKey = groupKey(decodedName);
     const supabase = createClient();
 
-    // entity_ledger has NO created_at — fetch without it
-    const { data: entries, error: entriesError } = await supabase
+    // Fetch ALL entity_ledger rows, then filter client-side by canonical key.
+    // This catches all name variants ("Shanavas Khan", "Shanavas Khan (father)", etc.)
+    const { data: allEntries, error: entriesError } = await supabase
       .from("entity_ledger")
-      .select("id, raw_ledger_id, interaction_type, trust_signal, ledger_note")
-      .ilike("name", decodedName);
+      .select("id, raw_ledger_id, name, interaction_type, trust_signal, ledger_note");
 
     if (entriesError) {
       console.error("[people/name] entity_ledger error:", entriesError);
-      return NextResponse.json({ error: "Failed to fetch person data.", detail: entriesError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to fetch person data.", detail: entriesError.message },
+        { status: 500 }
+      );
     }
 
-    if (!entries || entries.length === 0) {
+    // Keep only entries whose canonical key matches
+    const entries = (allEntries ?? []).filter(
+      (e) => groupKey(e.name as string) === canonicalKey
+    );
+
+    if (entries.length === 0) {
       return NextResponse.json({
         name: decodedName,
         entries: [],
@@ -32,7 +49,7 @@ export async function GET(
 
     const rawLedgerIds = entries.map((e) => e.raw_ledger_id as string);
 
-    // Fetch raw_ledgers with timestamps (the source of truth for timing)
+    // Fetch raw_ledgers with timestamps
     const { data: rawLedgers, error: rawError } = await supabase
       .from("raw_ledgers")
       .select("id, content, created_at, intent_tag, local_timezone, location_text, device_type")
@@ -41,13 +58,11 @@ export async function GET(
 
     if (rawError) console.error("[people/name] raw_ledgers error:", rawError);
 
-    // Build a timestamp map to enrich entity entries
     const tsMap: Record<string, string> = {};
     for (const r of rawLedgers ?? []) {
       tsMap[r.id as string] = r.created_at as string;
     }
 
-    // Enrich entries with timestamps from raw_ledgers
     const enrichedEntries = entries.map((e) => ({
       ...e,
       created_at: tsMap[e.raw_ledger_id as string] ?? null,
