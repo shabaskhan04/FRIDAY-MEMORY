@@ -1,0 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  
+  --color-background: hsl(240 10% 4%);
+  --color-foreground: hsl(0 0% 98%);
+  
+  --color-card: hsl(240 6% 10%);
+  --color-card-foreground: hsl(0 0% 98%);
+  
+  --color-popover: hsl(240 6% 10%);
+  --color-popover-foreground: hsl(0 0% 98%);
+  
+  --color-primary: hsl(262 83% 68%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  
+  --color-secondary: hsl(240 5% 16%);
+  --color-secondary-foreground: hsl(0 0% 98%);
+  
+  --color-muted: hsl(240 5% 16%);
+  --color-muted-foreground: hsl(240 5% 55%);
+  
+  --color-accent: hsl(262 83% 68%);
+  --color-accent-foreground: hsl(0 0% 100%);
+  
+  --color-destructive: hsl(0 72% 63%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  
+  --color-success: hsl(160 84% 39%);
+  --color-success-foreground: hsl(0 0% 100%);
+  
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 10%);
+  
+  --color-border: hsl(240 5% 18%);
+  --color-input: hsl(240 5% 18%);
+  --color-ring: hsl(262 83% 68%);
+  
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}
+
+@utility animate-shake {
+  animation: shake 0.45s ease-in-out;
+}
+
+@keyframes fade-out-shrink {
+  0%   { opacity: 1; transform: scale(1);    max-height: 120px; margin-bottom: 0.5rem; }
+  50%  { opacity: 0; transform: scale(0.95); max-height: 60px;  }
+  100% { opacity: 0; transform: scale(0.9);  max-height: 0;     margin-bottom: 0; padding: 0; overflow: hidden; }
+}
+
+@utility animate-fade-out-shrink {
+  animation: fade-out-shrink 0.4s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.4s ease-out forwards;
+}
+
+@utility animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+@utility animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+@utility glass-card {
+  background: linear-gradient(135deg, 
+    hsl(240 6% 12% / 0.8) 0%, 
+    hsl(240 6% 8% / 0.6) 100%
+  );
+  border: 1px solid hsl(240 5% 20% / 0.5);
+  backdrop-filter: blur(20px);
+}
+
+@utility glass-card-hover {
+  background: linear-gradient(135deg, 
+    hsl(240 6% 14% / 0.9) 0%, 
+    hsl(240 6% 10% / 0.7) 100%
+  );
+}
+
+@utility gradient-purple {
+  background: linear-gradient(135deg, hsl(262 83% 68%) 0%, hsl(280 80% 60%) 100%);
+}
+
+@utility gradient-purple-subtle {
+  background: linear-gradient(135deg, hsl(262 83% 68% / 0.15) 0%, hsl(280 80% 60% / 0.05) 100%);
+}
+
+/* ── Print styles ─────────────────────────────────────────── */
+@media print {
+  nav, header, .memory-input-area, button, [data-no-print] {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+  .glass-card {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    backdrop-filter: none !important;
+    page-break-inside: avoid;
+    margin-bottom: 8pt;
+  }
+  .pb-28, .pb-24 { padding-bottom: 0 !important; }
+  * { color: black !important; }
+}

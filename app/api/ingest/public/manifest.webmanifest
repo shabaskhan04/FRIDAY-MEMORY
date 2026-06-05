@@ -1,0 +1,82 @@
+{
+  "name": "FRIDAY Memory Router",
+  "short_name": "FRIDAY",
+  "description": "Capture thoughts, todos, people, health signals, and memory insights from a private installable app.",
+  "id": "/?app=friday-memory",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#8b5cf6",
+  "categories": ["productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/friday-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "FRIDAY memory insights dashboard"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "FRIDAY memory router"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Capture memory",
+      "short_name": "Capture",
+      "description": "Open FRIDAY ready to capture a thought.",
+      "url": "/?action=capture",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Review todos",
+      "short_name": "Todos",
+      "description": "Open FRIDAY and review pending tasks.",
+      "url": "/?tab=todos",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Memory insights",
+      "short_name": "Insights",
+      "description": "Open the insights view.",
+      "url": "/?tab=insights",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
+}
