@@ -12,3 +12,19 @@ export function recencyScore(createdAt: string | Date): number {
   const days = (Date.now() - new Date(createdAt).getTime()) / (1000 * 3600 * 24);
   return days < 30 ? 1.0 : 0.9;
 }
+
+export interface HybridMemoryRow {
+  id: string;
+  content: string;
+  created_at: string;
+  intent_tag: string | null;
+  local_timezone: string | null;
+  location_text: string | null;
+  semantic_score: number;
+  keyword_score: number;
+  entity_score: number;
+  recency_score: number;
+  final_score: number;
+  similarity: number;          // alias of final_score — keeps UI compat
+  matched_entities: string[];
+}
