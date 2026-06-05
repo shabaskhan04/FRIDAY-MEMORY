@@ -532,39 +532,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const temporalWritePromise: Promise<{ error: unknown }> =
     temporalEvents.length > 0
-      ? supabase.from("temporal_memories").insert(
-          temporalEvents.map((e) => ({
-            raw_ledger_id:  rawLedgerId,
-            time_horizon:   e.time_horizon,
-            estimated_date: e.estimated_date ?? null,
-            era:            e.era            ?? null,
-            event_summary:  e.event_summary  ?? null,
-          }))
-        ).then((res) => ({ error: res.error }))
+      ? Promise.resolve(
+          supabase.from("temporal_memories").insert(
+            temporalEvents.map((e) => ({
+              raw_ledger_id:  rawLedgerId,
+              time_horizon:   e.time_horizon,
+              estimated_date: e.estimated_date ?? null,
+              era:            e.era            ?? null,
+              event_summary:  e.event_summary  ?? null,
+            }))
+          ).then((res) => ({ error: res.error }))
+        )
       : Promise.resolve({ error: null });
 
   const entityWritePromise: Promise<{ error: unknown }> =
     entityUpdates.length > 0
-      ? supabase.from("entity_ledger").insert(
-          entityUpdates.map((e) => ({
-            raw_ledger_id:    rawLedgerId,
-            name:             e.name,
-            interaction_type: e.interaction_type ?? null,
-            trust_signal:     e.trust_signal,
-            ledger_note:      e.ledger_note      ?? null,
-          }))
-        ).then((res) => ({ error: res.error }))
+      ? Promise.resolve(
+          supabase.from("entity_ledger").insert(
+            entityUpdates.map((e) => ({
+              raw_ledger_id:    rawLedgerId,
+              name:             e.name,
+              interaction_type: e.interaction_type ?? null,
+              trust_signal:     e.trust_signal,
+              ledger_note:      e.ledger_note      ?? null,
+            }))
+          ).then((res) => ({ error: res.error }))
+        )
       : Promise.resolve({ error: null });
 
   const taskWritePromise: Promise<{ error: unknown }> =
     extractedTasks.length > 0
-      ? supabase.from("todo_tasks").insert(
-          extractedTasks.map((task) => ({
-            raw_ledger_id:    rawLedgerId,
-            task_description: task.trim(),
-            status:           "pending",
-          }))
-        ).then((res) => ({ error: res.error }))
+      ? Promise.resolve(
+          supabase.from("todo_tasks").insert(
+            extractedTasks.map((task) => ({
+              raw_ledger_id:    rawLedgerId,
+              task_description: task.trim(),
+              status:           "pending",
+            }))
+          ).then((res) => ({ error: res.error }))
+        )
       : Promise.resolve({ error: null });
 
   const [temporalResult, entityResult, taskResult, embeddingResult] =
