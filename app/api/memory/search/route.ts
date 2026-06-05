@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 import { analyzeQuery } from "@/lib/queryAnalyzer";
+import { recencyScore } from "@/lib/recency"; // flat 2-tier: 1.0 (<30d) or 0.9
 
 export const runtime = "nodejs";
 
@@ -30,21 +31,6 @@ export interface HybridMemoryRow {
   matched_entities: string[];
 }
 
-/**
- * Flat 2-tier recency scoring for lifelong memory.
- * Memories from the last 30 days get a slight boost (1.0),
- * while all older memories remain highly accessible (0.9).
- * No memory ever decays below 0.9.
- *
- * Note: recency_score is computed by the SQL RPC (match_memories_hybrid).
- * This function is the canonical TypeScript reference and is used when
- * recency must be calculated outside the SQL layer (e.g. unit tests,
- * future in-memory pipelines).
- */
-export function recencyScore(createdAt: string | Date): number {
-  const days = (Date.now() - new Date(createdAt).getTime()) / (1000 * 3600 * 24);
-  return days < 30 ? 1.0 : 0.9;
-}
 
 function normalizeLimit(limit: unknown): number {
   if (typeof limit !== "number" || !Number.isFinite(limit)) return 20;
