@@ -154,7 +154,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let answer = raw.trim();
     let cited_ids: string[] = [];
 
-    const jsonMatch = raw.match(/\{"cited_ids":\s*\[.*?\]\}/s);
+    const jsonMatch = raw.match(/\{"cited_ids":\s*\[[\s\S]*?\]\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]) as { cited_ids: string[] };
