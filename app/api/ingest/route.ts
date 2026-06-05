@@ -519,7 +519,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // All four writes are independent — run them in parallel.
   // The embedding write is conditional: only runs if a vector was generated.
 
-  const embeddingWritePromise: Promise<{ error: unknown }> =
+  const embeddingWritePromise =
     embeddingVector !== null
       ? supabase
           .from("ledger_embeddings")
