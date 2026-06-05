@@ -28,9 +28,9 @@ interface HealthAnalysis {
   activity_score: number;           // 0–100
   consistency_score: number;        // 0–100 (how consistent over 7 days)
 
-  sleep_debt_hours: number;         // cumulative deficit vs 8h target over 7 days
-  avg_sleep_7d: number;
-  avg_steps_7d: number;
+  sleep_debt_hours: number | null;         // cumulative deficit vs 8h target over 7 days
+  avg_sleep_7d: number | null;
+  avg_steps_7d: number | null;
 
   insights: string[];               // 2–4 sharp, specific observations
   nudges: string[];                 // 2–3 concrete action items for today
@@ -175,6 +175,14 @@ export async function GET(): Promise<NextResponse> {
       console.error("[health/analyze] Groq returned malformed JSON:", raw);
       return NextResponse.json({ error: "AI returned malformed JSON." }, { status: 500 });
     }
+
+    // Sanitize: the AI may return null for numeric fields when data is sparse.
+    // Coerce to 0 so the frontend never calls .toFixed() on null.
+    analysis.avg_sleep_7d    = analysis.avg_sleep_7d    ?? 0;
+    analysis.avg_steps_7d    = analysis.avg_steps_7d    ?? 0;
+    analysis.sleep_debt_hours = analysis.sleep_debt_hours ?? 0;
+    analysis.insights        = analysis.insights        ?? [];
+    analysis.nudges          = analysis.nudges          ?? [];
 
     // Persist the readiness score to health_scores table
     // (non-fatal if table doesn't exist yet)

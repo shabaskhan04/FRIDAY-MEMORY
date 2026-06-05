@@ -29,9 +29,9 @@ interface HealthAnalysis {
   sleep_score: number;
   activity_score: number;
   consistency_score: number;
-  sleep_debt_hours: number;
-  avg_sleep_7d: number;
-  avg_steps_7d: number;
+  sleep_debt_hours: number | null;
+  avg_sleep_7d: number | null;
+  avg_steps_7d: number | null;
   insights: string[];
   nudges: string[];
   pattern_alert: string | null;
@@ -311,7 +311,7 @@ export function HealthView({ isConfigured }: HealthViewProps) {
                 </div>
 
                 {/* Sleep debt */}
-                {analysis.sleep_debt_hours > 0 && (
+                {(analysis.sleep_debt_hours ?? 0) > 0 && (
                   <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <Moon className="h-3.5 w-3.5 text-indigo-400" />
@@ -319,10 +319,10 @@ export function HealthView({ isConfigured }: HealthViewProps) {
                     </div>
                     <span className={cn(
                       "text-sm font-semibold",
-                      analysis.sleep_debt_hours > 10 ? "text-destructive" :
-                      analysis.sleep_debt_hours > 5  ? "text-warning"     : "text-foreground"
+                      (analysis.sleep_debt_hours ?? 0) > 10 ? "text-destructive" :
+                      (analysis.sleep_debt_hours ?? 0) > 5  ? "text-warning"     : "text-foreground"
                     )}>
-                      {analysis.sleep_debt_hours.toFixed(1)}h
+                      {(analysis.sleep_debt_hours ?? 0).toFixed(1)}h
                     </span>
                   </div>
                 )}
@@ -612,10 +612,11 @@ function ReadinessRing({ analysis, loading }: { analysis: HealthAnalysis; loadin
       <div className="flex-1 min-w-0">
         <p className={cn("text-lg font-bold leading-tight", colors.text)}>{analysis.readiness_label}</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-          Sleep {analysis.avg_sleep_7d.toFixed(1)}h avg · {analysis.avg_steps_7d.toLocaleString()} steps avg
+          {analysis.avg_sleep_7d != null ? `Sleep ${analysis.avg_sleep_7d.toFixed(1)}h avg` : "No sleep data"}
+          {analysis.avg_steps_7d != null ? ` · ${analysis.avg_steps_7d.toLocaleString()} steps avg` : ""}
         </p>
-        {analysis.sleep_debt_hours > 0 && (
-          <p className="text-[10px] text-warning mt-1">{analysis.sleep_debt_hours.toFixed(1)}h sleep debt this week</p>
+        {(analysis.sleep_debt_hours ?? 0) > 0 && (
+          <p className="text-[10px] text-warning mt-1">{(analysis.sleep_debt_hours ?? 0).toFixed(1)}h sleep debt this week</p>
         )}
       </div>
     </div>
