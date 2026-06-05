@@ -12,6 +12,7 @@ interface RawLedger {
   intent_tag: string;
   local_timezone?: string;
   location_text?: string;
+  similarity?: number;
 }
 
 interface MemoryTabProps {
@@ -27,7 +28,10 @@ const intentConfig: Record<string, { label: string; emoji: string; color: string
 export function MemoryTab({ isConfigured }: MemoryTabProps) {
   const [ledgers, setLedgers] = useState<RawLedger[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [search, setSearch] = useState("");
+  const [semanticResults, setSemanticResults] = useState<RawLedger[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [filterIntent, setFilterIntent] = useState<string>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -49,6 +53,55 @@ export function MemoryTab({ isConfigured }: MemoryTabProps) {
     };
     void fetchAll();
   }, [isConfigured]);
+
+  useEffect(() => {
+    const query = search.trim();
+    if (!isConfigured || query.length === 0) {
+      setSemanticResults(null);
+      setSearchError(null);
+      setIsSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsSearching(true);
+      setSearchError(null);
+
+      try {
+        const response = await fetch("/api/memory/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, limit: 50 }),
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json()) as {
+          memories?: RawLedger[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Semantic search failed.");
+        }
+
+        setSemanticResults(payload.memories ?? []);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setSemanticResults(null);
+        setSearchError(
+          err instanceof Error ? err.message : "Using plain text search."
+        );
+      } finally {
+        if (!controller.signal.aborted) setIsSearching(false);
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [search, isConfigured]);
 
   const getRelativeTime = (iso: string): string => {
     const now = new Date();
@@ -78,8 +131,14 @@ export function MemoryTab({ isConfigured }: MemoryTabProps) {
     }
   };
 
-  const filtered = ledgers.filter((l) => {
-    const matchSearch = search === "" || l.content.toLowerCase().includes(search.toLowerCase());
+  const sourceLedgers = semanticResults ?? ledgers;
+  const usingSemanticResults = search.trim().length > 0 && semanticResults !== null;
+
+  const filtered = sourceLedgers.filter((l) => {
+    const matchSearch =
+      usingSemanticResults ||
+      search === "" ||
+      l.content.toLowerCase().includes(search.toLowerCase());
     const matchIntent = filterIntent === "all" || l.intent_tag === filterIntent;
     return matchSearch && matchIntent;
   });
@@ -110,7 +169,20 @@ export function MemoryTab({ isConfigured }: MemoryTabProps) {
             placeholder="Search memories..."
             className="w-full rounded-2xl glass-card pl-9 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 bg-transparent"
           />
+          {isSearching && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
+          )}
         </div>
+
+        {search.trim().length > 0 && (
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {searchError
+              ? "Semantic search unavailable, showing plain text matches."
+              : usingSemanticResults
+                ? "Semantic results ranked by meaning."
+                : "Searching by meaning..."}
+          </p>
+        )}
 
         {/* Filter pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
@@ -183,7 +255,9 @@ export function MemoryTab({ isConfigured }: MemoryTabProps) {
                           {cfg.label}
                         </span>
                         <span className="text-[10px] text-muted-foreground shrink-0">
-                          {getRelativeTime(ledger.created_at)}
+                          {ledger.similarity !== undefined
+                            ? `${Math.round(ledger.similarity * 100)}% match`
+                            : getRelativeTime(ledger.created_at)}
                         </span>
                       </div>
 
