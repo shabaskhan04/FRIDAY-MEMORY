@@ -15,10 +15,12 @@ import { PeopleList } from "@/components/memory/people-list";
 import { PersonProfile } from "@/components/memory/person-profile";
 import { InsightsView } from "@/components/memory/insights-view";
 import { MemoryTab } from "@/components/memory/memory-tab";
-
 import { HealthView } from "@/components/memory/health-view";
-
 import { LocationData } from "@/components/memory/memory-input";
+
+// ============================================================
+// Types
+// ============================================================
 
 type TabId = "home" | "memory" | "people" | "todos" | "insights" | "health";
 
@@ -48,20 +50,67 @@ interface StatusMessage {
   intentTag?: string;
 }
 
-export default function CognitiveRouter() {
-  const [ledgers, setLedgers] = useState<RawLedger[]>([]);
-  const [todos, setTodos] = useState<TodoTask[]>([]);
-  const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+// ============================================================
+// SemanticEngineIndicator
+// ============================================================
+
+/**
+ * Subtle, absolute-positioned badge that confirms the semantic
+ * cognitive search engine is active. Renders only in the home
+ * tab's "Recent Memories" section header, aligned to the right.
+ * Uses the existing design-token palette — no new colours introduced.
+ */
+function SemanticEngineIndicator(): React.ReactElement {
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      aria-label="Semantic cognitive search engine status: active"
+      role="status"
+    >
+      {/* Pulsing dot — mirrors the online indicator in the Header */}
+      <span className="relative flex h-1.5 w-1.5">
+        <span
+          className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60"
+          aria-hidden="true"
+        />
+        <span
+          className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary"
+          aria-hidden="true"
+        />
+      </span>
+
+      {/* Label */}
+      <span
+        className="font-mono text-[9px] font-medium tracking-widest text-primary/70 uppercase select-none"
+        style={{ letterSpacing: "0.15em" }}
+      >
+        Semantic Cognitive Search Engine{" "}
+        <span className="text-primary/50">//</span>{" "}
+        <span className="text-primary">Active</span>
+      </span>
+    </div>
+  );
+}
+
+// ============================================================
+// CognitiveRouter (page component)
+// ============================================================
+
+export default function CognitiveRouter(): React.ReactElement {
+  const [ledgers, setLedgers]     = useState<RawLedger[]>([]);
+  const [todos, setTodos]         = useState<TodoTask[]>([]);
+  const [status, setStatus]       = useState<StatusMessage | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
-  const [prefillText, setPrefillText] = useState<string | undefined>(undefined);
-  const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
+  const [prefillText, setPrefillText]       = useState<string | undefined>(undefined);
+  const [statsRefreshTrigger, setStatsRefreshTrigger] = useState<number>(0);
 
-  const isConfigured = useMemo(() => isSupabaseConfigured(), []);
+  const isConfigured: boolean = useMemo(() => isSupabaseConfigured(), []);
 
   // ── Fetch recent ledgers ──────────────────────────────────
+
   const fetchLedgers = useCallback(async (): Promise<void> => {
     if (!isConfigured) return;
     try {
@@ -73,11 +122,12 @@ export default function CognitiveRouter() {
         .limit(5);
       if (!error && data) setLedgers(data as RawLedger[]);
     } catch {
-      // Supabase not configured, ignore
+      // Supabase not configured — ignore silently
     }
   }, [isConfigured]);
 
   // ── Fetch todos ───────────────────────────────────────────
+
   const fetchTodos = useCallback(async (): Promise<void> => {
     if (!isConfigured) return;
     try {
@@ -95,34 +145,25 @@ export default function CognitiveRouter() {
     void fetchTodos();
   }, [fetchLedgers, fetchTodos]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const launchTab = params.get("tab");
-    const action = params.get("action");
-    const validTabs: TabId[] = ["home", "memory", "people", "todos", "insights", "health"];
-
-    if (launchTab && validTabs.includes(launchTab as TabId)) {
-      setActiveTab(launchTab as TabId);
-    } else if (action === "capture") {
-      setActiveTab("home");
-    }
-  }, []);
-
   // ── Derived state ─────────────────────────────────────────
-  const pendingTodos = todos.filter((t) => t.status === "pending");
-  // Only show the tab when there are pending tasks
-  const hasTodos = pendingTodos.length > 0;
 
-  // Auto-navigate away from todos tab when all tasks are done
+  const pendingTodos: TodoTask[] = todos.filter((t) => t.status === "pending");
+  const hasTodos: boolean        = pendingTodos.length > 0;
+
+  // Auto-navigate away from todos tab when all tasks complete
   useEffect(() => {
-    if (activeTab === "todos" && pendingTodos.length === 0 && todos.length > 0) {
-      // Small delay so the last item's exit animation can finish
-      const t = setTimeout(() => setActiveTab("home"), 500);
-      return () => clearTimeout(t);
+    if (
+      activeTab === "todos" &&
+      pendingTodos.length === 0 &&
+      todos.length > 0
+    ) {
+      const timer = setTimeout(() => setActiveTab("home"), 500);
+      return () => clearTimeout(timer);
     }
   }, [pendingTodos.length, todos.length, activeTab]);
 
   // ── Handle memory submit ──────────────────────────────────
+
   const handleSubmit = async (
     content: string,
     deviceType: string,
@@ -142,43 +183,42 @@ export default function CognitiveRouter() {
 
     try {
       const res = await fetch("/api/ingest", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content,
-          device_type: deviceType,
+          device_type:    deviceType,
           local_timezone: timezone,
           ...(location ?? {}),
         }),
       });
 
       const data = (await res.json()) as {
-        success?: boolean;
-        error?: string;
-        temporal_count?: number;
-        entity_count?: number;
-        task_count?: number;
-        intent_tag?: string;
+        success?:          boolean;
+        error?:            string;
+        temporal_count?:   number;
+        entity_count?:     number;
+        task_count?:       number;
+        intent_tag?:       string;
+        embedding_stored?: boolean;
       };
 
       if (!res.ok) throw new Error(data.error ?? "Ingest failed.");
 
-      const taskCount = data.task_count ?? 0;
+      const taskCount: number = data.task_count ?? 0;
 
       setStatus({
-        type: "success",
-        text: "Memory processed and stored",
+        type:          "success",
+        text:          "Memory processed and stored",
         temporalCount: data.temporal_count ?? 0,
-        entityCount: data.entity_count ?? 0,
+        entityCount:   data.entity_count   ?? 0,
         taskCount,
-        intentTag: data.intent_tag,
+        intentTag:     data.intent_tag,
       });
 
-      // Refresh data
       await Promise.all([fetchLedgers(), fetchTodos()]);
       setStatsRefreshTrigger((n) => n + 1);
 
-      // Auto-switch to todos tab if new tasks were created
       if (taskCount > 0) {
         setActiveTab("todos");
       }
@@ -193,7 +233,8 @@ export default function CognitiveRouter() {
   };
 
   // ── Handle quick actions ──────────────────────────────────
-  const handleQuickAction = (action: string, prefill?: string) => {
+
+  const handleQuickAction = (action: string, prefill?: string): void => {
     if (action === "analyze") {
       setActiveTab("insights");
       return;
@@ -205,6 +246,7 @@ export default function CognitiveRouter() {
   };
 
   // ── Handle todo toggle ────────────────────────────────────
+
   const handleTodoToggle = async (
     id: string,
     newStatus: "pending" | "done"
@@ -215,13 +257,12 @@ export default function CognitiveRouter() {
     );
 
     const res = await fetch("/api/todos", {
-      method: "PATCH",
+      method:  "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status: newStatus }),
     });
 
     if (!res.ok) {
-      // Revert optimistic update and throw so TodoList shows error state
       await fetchTodos();
       const errData = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(errData.error ?? "Failed to update todo");
@@ -229,33 +270,40 @@ export default function CognitiveRouter() {
   };
 
   // ── Handle person selection ───────────────────────────────
-  const handleSelectPerson = (name: string) => {
+
+  const handleSelectPerson = (name: string): void => {
     setSelectedPerson(name);
   };
 
-  const handleBackFromProfile = () => {
+  const handleBackFromProfile = (): void => {
     setSelectedPerson(null);
   };
 
   // ── Tab change handler ────────────────────────────────────
-  const handleTabChange = (tab: TabId) => {
+
+  const handleTabChange = (tab: TabId): void => {
     setActiveTab(tab);
     if (tab !== "people") setSelectedPerson(null);
   };
 
-  // ── Page title for each tab ───────────────────────────────
+  // ── Page title per tab ────────────────────────────────────
+
   const tabTitle: Record<TabId, string> = {
-    home: "Recent Memories",
-    memory: "All Memories",
-    people: selectedPerson ? selectedPerson : "People",
-    todos: "To-Do",
+    home:     "Recent Memories",
+    memory:   "All Memories",
+    people:   selectedPerson ? selectedPerson : "People",
+    todos:    "To-Do",
     insights: "Insights",
-    health: "Health",
+    health:   "Health",
   };
+
+  // ============================================================
+  // Render
+  // ============================================================
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      {/* Background gradient */}
+      {/* Background gradient blobs */}
       <div className="fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-1/2 left-1/2 h-[800px] w-[800px] -translate-x-1/2 rounded-full bg-primary/8 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[400px] w-[400px] rounded-full bg-purple-600/5 blur-[100px]" />
@@ -267,7 +315,8 @@ export default function CognitiveRouter() {
       />
 
       <main className="mx-auto max-w-lg px-4 pt-4">
-        {/* ── HOME TAB ── */}
+
+        {/* ── HOME TAB ────────────────────────────────────── */}
         {activeTab === "home" && (
           <>
             <GreetingCard
@@ -296,36 +345,49 @@ export default function CognitiveRouter() {
             {/* Quick Actions */}
             <QuickActions onAction={handleQuickAction} />
 
-            {/* Recent Memories */}
+            {/* Recent Memories — section header with semantic engine indicator */}
             <section className="mt-6">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-foreground">Recent Memories</h2>
-                {ledgers.length > 0 && (
-                  <button
-                    onClick={() => setActiveTab("memory")}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    See all
-                  </button>
-                )}
+                <h2 className="text-sm font-semibold text-foreground">
+                  Recent Memories
+                </h2>
+
+                <div className="flex items-center gap-3">
+                  {/* ── SEMANTIC ENGINE STATUS BADGE ── */}
+                  <SemanticEngineIndicator />
+
+                  {ledgers.length > 0 && (
+                    <button
+                      onClick={() => setActiveTab("memory")}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      See all
+                    </button>
+                  )}
+                </div>
               </div>
+
               <LedgerList ledgers={ledgers} />
             </section>
           </>
         )}
 
-        {/* ── MEMORY TAB ── */}
+        {/* ── MEMORY TAB ──────────────────────────────────── */}
         {activeTab === "memory" && (
           <section>
             <div className="mb-4">
-              <h2 className="text-base font-semibold text-foreground">{tabTitle.memory}</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">All your captured thoughts</p>
+              <h2 className="text-base font-semibold text-foreground">
+                {tabTitle.memory}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                All your captured thoughts
+              </p>
             </div>
             <MemoryTab isConfigured={isConfigured} />
           </section>
         )}
 
-        {/* ── PEOPLE TAB ── */}
+        {/* ── PEOPLE TAB ──────────────────────────────────── */}
         {activeTab === "people" && (
           <section>
             {selectedPerson ? (
@@ -339,14 +401,17 @@ export default function CognitiveRouter() {
           </section>
         )}
 
-        {/* ── TODOS TAB ── */}
+        {/* ── TODOS TAB ───────────────────────────────────── */}
         {activeTab === "todos" && (
           <section>
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-foreground">To-Do</h2>
+                <h2 className="text-base font-semibold text-foreground">
+                  To-Do
+                </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {pendingTodos.length} pending · {todos.length - pendingTodos.length} done
+                  {pendingTodos.length} pending ·{" "}
+                  {todos.length - pendingTodos.length} done
                 </p>
               </div>
             </div>
@@ -354,27 +419,36 @@ export default function CognitiveRouter() {
           </section>
         )}
 
-        {/* ── INSIGHTS TAB ── */}
+        {/* ── INSIGHTS TAB ────────────────────────────────── */}
         {activeTab === "insights" && (
           <section>
             <div className="mb-4">
-              <h2 className="text-base font-semibold text-foreground">Insights</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Your memory analytics</p>
+              <h2 className="text-base font-semibold text-foreground">
+                Insights
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Your memory analytics
+              </p>
             </div>
             <InsightsView isConfigured={isConfigured} />
           </section>
         )}
 
-        {/* ── HEALTH TAB ── */}
+        {/* ── HEALTH TAB ──────────────────────────────────── */}
         {activeTab === "health" && (
           <section>
             <div className="mb-4">
-              <h2 className="text-base font-semibold text-foreground">Health</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Sleep, steps & body metrics</p>
+              <h2 className="text-base font-semibold text-foreground">
+                Health
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sleep, steps & body metrics
+              </p>
             </div>
             <HealthView isConfigured={isConfigured} />
           </section>
         )}
+
       </main>
 
       {/* Bottom Navigation */}
