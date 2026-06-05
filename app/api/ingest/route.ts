@@ -540,7 +540,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             era:            e.era            ?? null,
             event_summary:  e.event_summary  ?? null,
           }))
-        )
+        ).then((res) => ({ error: res.error }))
       : Promise.resolve({ error: null });
 
   const entityWritePromise: Promise<{ error: unknown }> =
@@ -553,7 +553,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             trust_signal:     e.trust_signal,
             ledger_note:      e.ledger_note      ?? null,
           }))
-        )
+        ).then((res) => ({ error: res.error }))
       : Promise.resolve({ error: null });
 
   const taskWritePromise: Promise<{ error: unknown }> =
@@ -564,7 +564,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             task_description: task.trim(),
             status:           "pending",
           }))
-        )
+        ).then((res) => ({ error: res.error }))
       : Promise.resolve({ error: null });
 
   const [temporalResult, entityResult, taskResult, embeddingResult] =
