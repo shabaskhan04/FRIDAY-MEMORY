@@ -2,9 +2,30 @@
 
 import { useState, useCallback, useEffect } from "react";
 import {
-  CheckSquare, Square, Loader2, ListTodo, AlertCircle,
+  CheckSquare, Square, Loader2, ListTodo, AlertCircle, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ── Google Tasks icon (inline SVG — no extra dep) ─────────────
+
+function GoogleTasksIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="24" height="24" rx="4" fill="#1A73E8" />
+      <path
+        d="M12 6.5L13.5 9.5H16.5L14.25 11.5L15 14.5L12 12.75L9 14.5L9.75 11.5L7.5 9.5H10.5L12 6.5Z"
+        fill="white"
+      />
+    </svg>
+  );
+}
+
+// ── Types ─────────────────────────────────────────────────────
 
 interface TodoTask {
   id: string;
@@ -12,6 +33,9 @@ interface TodoTask {
   task_description: string;
   status: "pending" | "done";
   created_at: string;
+  source?: "friday" | "google_tasks";
+  google_task_id?: string | null;
+  google_list_id?: string | null;
 }
 
 interface TodoListProps {
@@ -19,11 +43,12 @@ interface TodoListProps {
   onTodoToggle: (id: string, newStatus: "pending" | "done") => Promise<void>;
 }
 
+// ── TodoList ──────────────────────────────────────────────────
+
 export function TodoList({ todos: propTodos, onTodoToggle }: TodoListProps) {
   const [todos, setTodos] = useState<TodoTask[]>(propTodos);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [errorIds, setErrorIds] = useState<Map<string, string>>(new Map());
-  // Track ids that are animating out (checked → about to disappear)
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -33,7 +58,6 @@ export function TodoList({ todos: propTodos, onTodoToggle }: TodoListProps) {
   const handleToggle = useCallback(
     async (todo: TodoTask) => {
       if (loadingIds.has(todo.id) || removingIds.has(todo.id)) return;
-      // Only pending → done triggers the remove animation
       if (todo.status !== "pending") return;
 
       setLoadingIds((prev) => new Set(prev).add(todo.id));
@@ -51,7 +75,6 @@ export function TodoList({ todos: propTodos, onTodoToggle }: TodoListProps) {
 
         await onTodoToggle(todo.id, "done");
 
-        // Start exit animation, then remove from local list
         setLoadingIds((prev) => { const n = new Set(prev); n.delete(todo.id); return n; });
         setRemovingIds((prev) => new Set(prev).add(todo.id));
         setTimeout(() => {
@@ -103,6 +126,8 @@ export function TodoList({ todos: propTodos, onTodoToggle }: TodoListProps) {
   );
 }
 
+// ── TodoItem ──────────────────────────────────────────────────
+
 function TodoItem({
   todo,
   isLoading,
@@ -118,6 +143,8 @@ function TodoItem({
   onToggle: (todo: TodoTask) => void;
   animDelay: number;
 }) {
+  const isGoogleTask = todo.source === "google_tasks";
+
   const getRelativeTime = (iso: string): string => {
     const now = new Date();
     const d = new Date(iso);
@@ -166,17 +193,42 @@ function TodoItem({
           <p className="text-sm text-foreground leading-relaxed">
             {todo.task_description}
           </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {getRelativeTime(todo.created_at)}
-            {errorMsg && (
-              <span className="ml-2 text-destructive">· {errorMsg}</span>
+          <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] text-muted-foreground">
+              {getRelativeTime(todo.created_at)}
+              {errorMsg && (
+                <span className="ml-2 text-destructive">· {errorMsg}</span>
+              )}
+            </p>
+
+            {/* Google Tasks badge */}
+            {isGoogleTask && (
+              <span className="flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5">
+                <GoogleTasksIcon className="h-3 w-3" />
+                <span className="text-[9px] font-medium text-blue-400">Google Tasks</span>
+              </span>
             )}
-          </p>
+          </div>
         </div>
 
-        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary">
-          Pending
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary">
+            Pending
+          </span>
+
+          {/* External link to Google Tasks web UI */}
+          {isGoogleTask && todo.google_task_id && (
+            <a
+              href={`https://tasks.google.com`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-blue-400 transition-colors"
+              title="Open in Google Tasks"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthGate } from "@/components/memory/auth-gate";
 import { PwaLifecycle } from "@/components/pwa/pwa-lifecycle";
+import { ActionApprovalModal } from "@/components/memory/action-approval-modal"; // ✅ add this
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://friday-memory.local"),
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className="min-h-screen antialiased">
         <AuthGate>{children}</AuthGate>
         <PwaLifecycle />
+        <ActionApprovalModal /> {/* ✅ modal will render when needed */}
       </body>
     </html>
   );

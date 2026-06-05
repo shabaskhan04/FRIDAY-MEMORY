@@ -1,8 +1,8 @@
 "use client";
 
-import { Settings, Eye, X, Loader2, ChevronRight, Printer, Database } from "lucide-react";
+import { Settings, Eye, X, Loader2, ChevronRight, Printer, Database, Link, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 interface HeaderProps {
   isOnline?: boolean;
@@ -31,6 +31,33 @@ interface DbStats {
   sizeEstimateKb: number;
 }
 
+// ── Google connection state ───────────────────────────────────
+
+type GoogleStatus = "checking" | "connected" | "disconnected" | "error";
+
+function useGoogleStatus(watch: boolean) {
+  const [status, setStatus] = useState<GoogleStatus>("checking");
+
+  const check = useCallback(async () => {
+    setStatus("checking");
+    try {
+      const res = await fetch("/api/google/status");
+      const data = (await res.json()) as { connected: boolean };
+      setStatus(data.connected ? "connected" : "disconnected");
+    } catch {
+      setStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (watch) void check();
+  }, [watch, check]);
+
+  return { status, refresh: check };
+}
+
+// ── Component ─────────────────────────────────────────────────
+
 export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showWeekly, setShowWeekly] = useState(false);
@@ -40,6 +67,9 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "database">("general");
+  const [isPrintLoading, setIsPrintLoading] = useState(false);
+
+  const { status: googleStatus, refresh: refreshGoogle } = useGoogleStatus(showSettings);
 
   const fetchWeeklySummary = useCallback(async () => {
     if (weeklySummary) { setShowWeekly(true); return; }
@@ -75,8 +105,6 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
       const entities = r2.count ?? 0;
       const todos = r3.count ?? 0;
       const temporal = r4.count ?? 0;
-
-      // Rough size estimate: avg content ~200 chars = 200 bytes per row
       const totalRows = memories + entities + todos + temporal;
       const sizeEstimateKb = Math.round((totalRows * 250) / 1024);
 
@@ -85,15 +113,12 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
     finally { setDbLoading(false); }
   }, [dbStats]);
 
-  const [isPrintLoading, setIsPrintLoading] = useState(false);
-
   const handlePrintMemory = async () => {
     setIsPrintLoading(true);
     try {
       const { createClient } = await import("@/lib/supabase");
       const supabase = createClient();
 
-      // Fetch everything from DB
       const [rawRes, entityRes, todoRes] = await Promise.all([
         supabase
           .from("raw_ledgers")
@@ -107,7 +132,6 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
       const entities = entityRes.data ?? [];
       const todos = todoRes.data ?? [];
 
-      // Build entity map by raw_ledger_id
       const entityMap: Record<string, typeof entities> = {};
       for (const e of entities) {
         const id = e.raw_ledger_id as string;
@@ -228,7 +252,6 @@ ${memories.map((m) => {
               {isOnline ? "Online" : "Offline"}
             </div>
 
-            {/* Eye — weekly summary */}
             <button
               onClick={() => void fetchWeeklySummary()}
               className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
@@ -243,7 +266,6 @@ ${memories.map((m) => {
               )}
             </button>
 
-            {/* Settings */}
             <button
               onClick={openSettings}
               className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
@@ -260,7 +282,6 @@ ${memories.map((m) => {
         <div className="fixed inset-0 z-[100] flex flex-col">
           <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" onClick={() => setShowWeekly(false)} />
           <div className="relative mt-auto w-full max-w-lg mx-auto rounded-t-3xl glass-card border border-border/50 max-h-[85vh] flex flex-col animate-fade-up">
-            {/* Panel header */}
             <div className="flex items-center justify-between p-5 pb-3 shrink-0">
               <div>
                 <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
@@ -277,7 +298,6 @@ ${memories.map((m) => {
               </button>
             </div>
 
-            {/* Scrollable content */}
             <div className="overflow-y-auto flex-1 px-5 pb-8 space-y-4">
               {weeklyLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -292,7 +312,6 @@ ${memories.map((m) => {
               )}
               {weeklySummary && !weeklyLoading && (
                 <>
-                  {/* Stats row */}
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { label: "Memories", value: weeklySummary.entry_count },
@@ -306,57 +325,21 @@ ${memories.map((m) => {
                     ))}
                   </div>
 
-                  {/* Mood */}
                   <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Week Vibe</p>
                     <p className="text-sm text-foreground">{weeklySummary.mood_summary}</p>
                   </div>
 
-                  {/* What to do */}
-                  <SummarySection
-                    title="✅ What To Do"
-                    items={weeklySummary.what_to_do}
-                    colorClass="text-success"
-                    bgClass="bg-success/8"
-                  />
-
-                  {/* What to avoid */}
-                  <SummarySection
-                    title="🚫 What To Avoid"
-                    items={weeklySummary.what_to_avoid}
-                    colorClass="text-destructive"
-                    bgClass="bg-destructive/8"
-                  />
-
-                  {/* What to improve */}
-                  <SummarySection
-                    title="📈 What To Improve"
-                    items={weeklySummary.what_to_improve}
-                    colorClass="text-warning"
-                    bgClass="bg-warning/8"
-                  />
-
-                  {/* Key people */}
+                  <SummarySection title="✅ What To Do" items={weeklySummary.what_to_do} colorClass="text-success" bgClass="bg-success/8" />
+                  <SummarySection title="🚫 What To Avoid" items={weeklySummary.what_to_avoid} colorClass="text-destructive" bgClass="bg-destructive/8" />
+                  <SummarySection title="📈 What To Improve" items={weeklySummary.what_to_improve} colorClass="text-warning" bgClass="bg-warning/8" />
                   {weeklySummary.key_people?.length > 0 && (
-                    <SummarySection
-                      title="👥 Key People This Week"
-                      items={weeklySummary.key_people}
-                      colorClass="text-primary"
-                      bgClass="bg-primary/8"
-                    />
+                    <SummarySection title="👥 Key People This Week" items={weeklySummary.key_people} colorClass="text-primary" bgClass="bg-primary/8" />
                   )}
-
-                  {/* Pending focus */}
                   {weeklySummary.pending_focus?.length > 0 && (
-                    <SummarySection
-                      title="🎯 Top Priorities"
-                      items={weeklySummary.pending_focus}
-                      colorClass="text-foreground"
-                      bgClass="bg-secondary"
-                    />
+                    <SummarySection title="🎯 Top Priorities" items={weeklySummary.pending_focus} colorClass="text-foreground" bgClass="bg-secondary" />
                   )}
 
-                  {/* Refresh button */}
                   <button
                     onClick={() => { setWeeklySummary(null); void fetchWeeklySummary(); }}
                     className="w-full rounded-2xl border border-border/50 py-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -385,7 +368,6 @@ ${memories.map((m) => {
               </button>
             </div>
 
-            {/* Tab switcher */}
             <div className="flex gap-2 px-5 pb-3 shrink-0">
               {(["general", "database"] as const).map((tab) => (
                 <button
@@ -413,6 +395,82 @@ ${memories.map((m) => {
                     <SettingsRow label="Supabase" value={isOnline ? "Connected" : "Disconnected"} valueColor={isOnline ? "text-success" : "text-destructive"} />
                     <SettingsRow label="AI (Groq)" value="Active" valueColor="text-success" />
                     <SettingsRow label="Model" value="llama-3.3-70b" />
+                  </div>
+
+                  {/* ── Google Workspace section ── */}
+                  <div className="rounded-2xl bg-secondary/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Google Workspace
+                      </p>
+                      <button
+                        onClick={() => void refreshGoogle()}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                        title="Refresh status"
+                      >
+                        <RefreshCw className={cn("h-3 w-3", googleStatus === "checking" && "animate-spin")} />
+                      </button>
+                    </div>
+
+                    {/* Status row */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-foreground">Status</span>
+                      <div className="flex items-center gap-1.5">
+                        {googleStatus === "checking" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full",
+                              googleStatus === "connected" ? "bg-success animate-pulse-soft" : "bg-destructive"
+                            )}
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "text-xs",
+                            googleStatus === "connected"
+                              ? "text-success"
+                              : googleStatus === "checking"
+                              ? "text-muted-foreground"
+                              : "text-destructive"
+                          )}
+                        >
+                          {googleStatus === "checking"
+                            ? "Checking…"
+                            : googleStatus === "connected"
+                            ? "Connected"
+                            : googleStatus === "error"
+                            ? "Error"
+                            : "Not connected"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {googleStatus === "connected" && (
+                      <>
+                        <SettingsRow label="Calendar" value="✓ Enabled" valueColor="text-success" />
+                        <SettingsRow label="Gmail" value="✓ Enabled" valueColor="text-success" />
+                        <SettingsRow label="Tasks" value="✓ Enabled" valueColor="text-success" />
+                      </>
+                    )}
+
+                    {/* Connect / reconnect button */}
+                    <a
+                      href="/api/google/connect"
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-xl p-3 text-sm transition-colors",
+                        googleStatus === "connected"
+                          ? "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                          : "gradient-purple text-white hover:opacity-90"
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Link className="h-4 w-4" />
+                        {googleStatus === "connected" ? "Reconnect Google" : "Connect Google Workspace"}
+                      </span>
+                      <ChevronRight className="h-4 w-4 opacity-60" />
+                    </a>
                   </div>
 
                   {/* Device */}
@@ -483,13 +541,12 @@ ${memories.map((m) => {
                     </div>
                   ) : dbStats ? (
                     <>
-                      {/* Table stats */}
                       <div className="rounded-2xl bg-secondary/50 p-4 space-y-3">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Row Counts</p>
                         {[
                           { label: "raw_ledgers", cols: "id, content, intent_tag, device_type, local_timezone, location_text, location_lat, location_lon, created_at", count: dbStats.memories },
                           { label: "entity_ledger", cols: "id, raw_ledger_id, name, interaction_type, trust_signal, ledger_note", count: dbStats.entities },
-                          { label: "todo_tasks", cols: "id, raw_ledger_id, task_description, status, created_at", count: dbStats.todos },
+                          { label: "todo_tasks", cols: "id, raw_ledger_id, task_description, status, source, google_task_id, created_at", count: dbStats.todos },
                           { label: "temporal_memories", cols: "id, raw_ledger_id, time_horizon, estimated_date, era, event_summary", count: dbStats.temporal },
                         ].map((t) => (
                           <div key={t.label} className="space-y-0.5">
@@ -502,7 +559,6 @@ ${memories.map((m) => {
                         ))}
                       </div>
 
-                      {/* Size estimate */}
                       <div className="rounded-2xl bg-secondary/50 p-4 space-y-3">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Storage Estimate</p>
                         <SettingsRow label="Total Rows" value={String(dbStats.memories + dbStats.entities + dbStats.todos + dbStats.temporal)} />
@@ -540,6 +596,8 @@ ${memories.map((m) => {
     </>
   );
 }
+
+// ── Sub-components ────────────────────────────────────────────
 
 function SettingsRow({
   label,
