@@ -54,12 +54,6 @@ interface StatusMessage {
 // SemanticEngineIndicator
 // ============================================================
 
-/**
- * Subtle, absolute-positioned badge that confirms the semantic
- * cognitive search engine is active. Renders only in the home
- * tab's "Recent Memories" section header, aligned to the right.
- * Uses the existing design-token palette — no new colours introduced.
- */
 function SemanticEngineIndicator(): React.ReactElement {
   return (
     <div
@@ -67,7 +61,6 @@ function SemanticEngineIndicator(): React.ReactElement {
       aria-label="Semantic cognitive search engine status: active"
       role="status"
     >
-      {/* Pulsing dot — mirrors the online indicator in the Header */}
       <span className="relative flex h-1.5 w-1.5">
         <span
           className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60"
@@ -79,7 +72,6 @@ function SemanticEngineIndicator(): React.ReactElement {
         />
       </span>
 
-      {/* Label */}
       <span
         className="font-mono text-[9px] font-medium tracking-widest text-primary/70 uppercase select-none"
         style={{ letterSpacing: "0.15em" }}
@@ -232,6 +224,51 @@ export default function CognitiveRouter(): React.ReactElement {
     }
   };
 
+  // ── Handle task submit (Tasks mode AI agent) ──────────────
+
+  const handleTaskSubmit = async (query: string): Promise<void> => {
+    if (!isConfigured) {
+      setStatus({
+        type: "warning",
+        text: "Connect Supabase from Settings to enable task staging.",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setStatus(null);
+
+    try {
+      const res = await fetch("/api/tasks/execute", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+
+      const data = (await res.json()) as {
+        success?:   boolean;
+        commandId?: string;
+        tool?:      string;
+        message?:   string;
+        error?:     string;
+      };
+
+      if (!res.ok) throw new Error(data.error ?? "Task staging failed.");
+
+      setStatus({
+        type: "success",
+        text: "Request sent for approval – check the drawer.",
+      });
+    } catch (err: unknown) {
+      setStatus({
+        type: "error",
+        text: err instanceof Error ? err.message : "Task agent failed.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // ── Handle quick actions ──────────────────────────────────
 
   const handleQuickAction = (action: string, prefill?: string): void => {
@@ -331,10 +368,11 @@ export default function CognitiveRouter(): React.ReactElement {
               refreshTrigger={statsRefreshTrigger}
             />
 
-            {/* Memory Input */}
+            {/* Memory / Task Input */}
             <div className="mb-6">
               <MemoryInput
                 onSubmit={handleSubmit}
+                onTaskSubmit={handleTaskSubmit}
                 isLoading={isLoading}
                 onRecordingChange={setIsRecording}
                 prefillText={prefillText}

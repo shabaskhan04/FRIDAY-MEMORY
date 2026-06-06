@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, MicOff, Loader2, Plus, MapPin, MapPinOff, Brain, CheckSquare, ChevronDown, Mail, Calendar as CalendarIcon } from "lucide-react";
+import { Mic, MicOff, Loader2, Plus, MapPin, MapPinOff, Brain, CheckSquare, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SpeechRecognitionEvent extends Event {
@@ -37,7 +37,8 @@ export interface LocationData {
   location_lon: number;
 }
 
-export type InputMode = "memory" | "gmail" | "calendar" | "task";
+/** Two top-level modes exposed in the dropdown. */
+export type InputMode = "memory" | "tasks";
 
 interface MemoryInputProps {
   onSubmit: (
@@ -46,6 +47,12 @@ interface MemoryInputProps {
     timezone: string,
     location?: LocationData
   ) => Promise<void>;
+  /**
+   * Called instead of onSubmit when the user submits in Tasks mode.
+   * Receives only the raw query string — routing/staging is handled
+   * server-side by /api/tasks/execute.
+   */
+  onTaskSubmit?: (query: string) => Promise<void>;
   isLoading: boolean;
   onRecordingChange?: (isRecording: boolean) => void;
   prefillText?: string;
@@ -94,6 +101,7 @@ type LocationState = "idle" | "requesting" | "granted" | "denied";
 
 export function MemoryInput({
   onSubmit,
+  onTaskSubmit,
   isLoading,
   onRecordingChange,
   prefillText,
@@ -195,6 +203,15 @@ export function MemoryInput({
   const handleSubmit = async () => {
     const trimmed = content.trim();
     if (!trimmed || isLoading) return;
+
+    // Tasks mode → delegate entirely to the AI agent route
+    if (activeMode === "tasks" && onTaskSubmit) {
+      await onTaskSubmit(trimmed);
+      setContent("");
+      return;
+    }
+
+    // Memory mode → original ingest flow
     const deviceType = detectDeviceType();
     const timezone = detectTimezone();
     await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined);
@@ -259,32 +276,28 @@ export function MemoryInput({
           onBlur={() => setIsFocused(false)}
           disabled={isLoading}
           placeholder={
-            isRecording ? "Listening..." :
-            activeMode === "gmail"    ? "e.g. Email john@acme.com about the project update..." :
-            activeMode === "calendar" ? "e.g. Team standup tomorrow at 10am for 30 mins..." :
-            activeMode === "task"     ? "e.g. Buy groceries by Friday..." :
-            "Enter a memory..."
+            isRecording
+              ? "Listening..."
+              : activeMode === "tasks"
+              ? "e.g. Email Raj about Orin, schedule standup tomorrow 3pm, add Buy milk..."
+              : "Enter a memory..."
           }
           className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
 
-        {/* Mode selector */}
+        {/* Mode selector — two options only */}
         <div className="relative shrink-0">
           <button
             type="button"
             onClick={() => setDropdownOpen((v) => !v)}
             className={cn(
               "flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-medium transition-all duration-200",
-              activeMode === "memory"   && "bg-primary/10 text-primary",
-              activeMode === "gmail"    && "bg-amber-500/10 text-amber-400",
-              activeMode === "calendar" && "bg-blue-500/10 text-blue-400",
-              activeMode === "task"     && "bg-emerald-500/10 text-emerald-400",
+              activeMode === "memory" && "bg-primary/10 text-primary",
+              activeMode === "tasks"  && "bg-emerald-500/10 text-emerald-400",
             )}
           >
-            {activeMode === "memory"   && <Brain className="h-3 w-3" />}
-            {activeMode === "gmail"    && <Mail className="h-3 w-3" />}
-            {activeMode === "calendar" && <CalendarIcon className="h-3 w-3" />}
-            {activeMode === "task"     && <CheckSquare className="h-3 w-3" />}
+            {activeMode === "memory" && <Brain className="h-3 w-3" />}
+            {activeMode === "tasks"  && <CheckSquare className="h-3 w-3" />}
             <span className="capitalize">{activeMode}</span>
             <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", dropdownOpen && "rotate-180")} />
           </button>
@@ -292,10 +305,8 @@ export function MemoryInput({
           {dropdownOpen && (
             <div className="absolute bottom-full mb-1.5 right-0 w-32 rounded-xl border border-border/60 bg-background shadow-lg overflow-hidden z-10">
               {([
-                { value: "memory",   label: "Memory",   icon: Brain,         color: "text-primary"      },
-                { value: "gmail",    label: "Gmail",    icon: Mail,          color: "text-amber-400"    },
-                { value: "calendar", label: "Calendar", icon: CalendarIcon,  color: "text-blue-400"     },
-                { value: "task",     label: "Task",     icon: CheckSquare,   color: "text-emerald-400"  },
+                { value: "memory", label: "Memory", icon: Brain,        color: "text-primary"      },
+                { value: "tasks",  label: "Tasks",  icon: CheckSquare,  color: "text-emerald-400"  },
               ] as const).map(({ value, label, icon: Icon, color }) => (
                 <button
                   key={value}
