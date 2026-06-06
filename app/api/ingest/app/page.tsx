@@ -16,7 +16,8 @@ import { PersonProfile } from "@/components/memory/person-profile";
 import { InsightsView } from "@/components/memory/insights-view";
 import { MemoryTab } from "@/components/memory/memory-tab";
 import { HealthView } from "@/components/memory/health-view";
-import { LocationData } from "@/components/memory/memory-input";
+import { ActionApprovalModal } from "@/components/memory/action-approval-modal";
+import { LocationData, InputMode } from "@/components/memory/memory-input";
 
 // ============================================================
 // Types
@@ -168,7 +169,8 @@ export default function CognitiveRouter(): React.ReactElement {
     content: string,
     deviceType: string,
     timezone: string,
-    location?: LocationData
+    location?: LocationData,
+    mode?: InputMode
   ): Promise<void> => {
     if (!isConfigured) {
       setStatus({
@@ -181,6 +183,32 @@ export default function CognitiveRouter(): React.ReactElement {
     setIsLoading(true);
     setStatus(null);
 
+    // ── Action modes: stage via parse-and-stage endpoint ──────────
+    if (mode === "gmail" || mode === "calendar" || mode === "task") {
+      try {
+        const res = await fetch("/api/commands/stage/parse", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode, content }),
+        });
+
+        const data = (await res.json()) as { staged?: boolean; id?: string; error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed to stage action.");
+
+        const label = mode === "gmail" ? "Email" : mode === "calendar" ? "Event" : "Task";
+        setStatus({ type: "success", text: `${label} staged — approve it from the action modal` });
+      } catch (err: unknown) {
+        setStatus({
+          type: "error",
+          text: err instanceof Error ? err.message : "An unknown error occurred.",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // ── Memory mode: existing ingest flow ─────────────────────────
     try {
       const res = await fetch("/api/ingest", {
         method:  "POST",
@@ -466,6 +494,9 @@ export default function CognitiveRouter(): React.ReactElement {
           onDismiss={() => setStatus(null)}
         />
       )}
+
+      {/* Action approval modal — floats over UI when commands are staged */}
+      <ActionApprovalModal />
     </div>
   );
 }

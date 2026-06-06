@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, MicOff, Loader2, Plus, MapPin, MapPinOff } from "lucide-react";
+import { Mic, MicOff, Loader2, Plus, MapPin, MapPinOff, Brain, CheckSquare, ChevronDown, Mail, Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SpeechRecognitionEvent extends Event {
@@ -37,12 +37,15 @@ export interface LocationData {
   location_lon: number;
 }
 
+export type InputMode = "memory" | "gmail" | "calendar" | "task";
+
 interface MemoryInputProps {
   onSubmit: (
     content: string,
     deviceType: string,
     timezone: string,
-    location?: LocationData
+    location?: LocationData,
+    mode?: InputMode
   ) => Promise<void>;
   isLoading: boolean;
   onRecordingChange?: (isRecording: boolean) => void;
@@ -96,6 +99,8 @@ export function MemoryInput({
   onPrefillConsumed,
 }: MemoryInputProps) {
   const [content, setContent] = useState("");
+  const [mode, setMode] = useState<InputMode>("memory");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -187,7 +192,7 @@ export function MemoryInput({
     if (!trimmed || isLoading) return;
     const deviceType = detectDeviceType();
     const timezone = detectTimezone();
-    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined);
+    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined, mode);
     setContent("");
   };
 
@@ -248,9 +253,63 @@ export function MemoryInput({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           disabled={isLoading}
-          placeholder={isRecording ? "Listening..." : "Enter a memory..."}
+          placeholder={
+            isRecording ? "Listening..." :
+            mode === "gmail"    ? "e.g. Email john@acme.com about the project update..." :
+            mode === "calendar" ? "e.g. Team standup tomorrow at 10am for 30 mins..." :
+            mode === "task"     ? "e.g. Buy groceries by Friday..." :
+            "Enter a memory..."
+          }
           className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
+
+        {/* Mode selector */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setDropdownOpen((v) => !v)}
+            className={cn(
+              "flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-medium transition-all duration-200",
+              mode === "memory"   && "bg-primary/10 text-primary",
+              mode === "gmail"    && "bg-amber-500/10 text-amber-400",
+              mode === "calendar" && "bg-blue-500/10 text-blue-400",
+              mode === "task"     && "bg-emerald-500/10 text-emerald-400",
+            )}
+          >
+            {mode === "memory"   && <Brain className="h-3 w-3" />}
+            {mode === "gmail"    && <Mail className="h-3 w-3" />}
+            {mode === "calendar" && <CalendarIcon className="h-3 w-3" />}
+            {mode === "task"     && <CheckSquare className="h-3 w-3" />}
+            <span className="capitalize">{mode}</span>
+            <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", dropdownOpen && "rotate-180")} />
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute bottom-full mb-1.5 right-0 w-32 rounded-xl border border-border/60 bg-background shadow-lg overflow-hidden z-10">
+              {([
+                { value: "memory",   label: "Memory",   icon: Brain,         color: "text-primary"      },
+                { value: "gmail",    label: "Gmail",    icon: Mail,          color: "text-amber-400"    },
+                { value: "calendar", label: "Calendar", icon: CalendarIcon,  color: "text-blue-400"     },
+                { value: "task",     label: "Task",     icon: CheckSquare,   color: "text-emerald-400"  },
+              ] as const).map(({ value, label, icon: Icon, color }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setMode(value); setDropdownOpen(false); }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors",
+                    mode === value
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  )}
+                >
+                  <Icon className={cn("h-3 w-3", color)} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Submit */}
         <button
