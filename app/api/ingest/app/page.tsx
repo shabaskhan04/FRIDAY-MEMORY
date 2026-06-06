@@ -17,7 +17,7 @@ import { InsightsView } from "@/components/memory/insights-view";
 import { MemoryTab } from "@/components/memory/memory-tab";
 import { HealthView } from "@/components/memory/health-view";
 import { ActionApprovalModal } from "@/components/memory/action-approval-modal";
-import { LocationData, InputMode } from "@/components/memory/memory-input";
+import { LocationData } from "@/components/memory/memory-input";
 
 // ============================================================
 // Types
@@ -55,12 +55,6 @@ interface StatusMessage {
 // SemanticEngineIndicator
 // ============================================================
 
-/**
- * Subtle, absolute-positioned badge that confirms the semantic
- * cognitive search engine is active. Renders only in the home
- * tab's "Recent Memories" section header, aligned to the right.
- * Uses the existing design-token palette — no new colours introduced.
- */
 function SemanticEngineIndicator(): React.ReactElement {
   return (
     <div
@@ -68,7 +62,6 @@ function SemanticEngineIndicator(): React.ReactElement {
       aria-label="Semantic cognitive search engine status: active"
       role="status"
     >
-      {/* Pulsing dot — mirrors the online indicator in the Header */}
       <span className="relative flex h-1.5 w-1.5">
         <span
           className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60"
@@ -79,8 +72,6 @@ function SemanticEngineIndicator(): React.ReactElement {
           aria-hidden="true"
         />
       </span>
-
-      {/* Label */}
       <span
         className="font-mono text-[9px] font-medium tracking-widest text-primary/70 uppercase select-none"
         style={{ letterSpacing: "0.15em" }}
@@ -107,7 +98,6 @@ export default function CognitiveRouter(): React.ReactElement {
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [prefillText, setPrefillText]       = useState<string | undefined>(undefined);
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState<number>(0);
-  const [inputMode, setInputMode] = useState<InputMode>("memory");
 
   const isConfigured: boolean = useMemo(() => isSupabaseConfigured(), []);
 
@@ -183,32 +173,6 @@ export default function CognitiveRouter(): React.ReactElement {
     setIsLoading(true);
     setStatus(null);
 
-    // ── Action modes: stage via parse-and-stage endpoint ──────────
-    if (inputMode === "gmail" || inputMode === "calendar" || inputMode === "task") {
-      try {
-        const res = await fetch("/api/commands/stage/parse", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: inputMode, content }),
-        });
-
-        const data = (await res.json()) as { staged?: boolean; id?: string; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to stage action.");
-
-        const label = inputMode === "gmail" ? "Email" : inputMode === "calendar" ? "Event" : "Task";
-        setStatus({ type: "success", text: `${label} staged — approve it from the action modal` });
-      } catch (err: unknown) {
-        setStatus({
-          type: "error",
-          text: err instanceof Error ? err.message : "An unknown error occurred.",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // ── Memory mode: existing ingest flow ─────────────────────────
     try {
       const res = await fetch("/api/ingest", {
         method:  "POST",
@@ -254,6 +218,51 @@ export default function CognitiveRouter(): React.ReactElement {
       setStatus({
         type: "error",
         text: err instanceof Error ? err.message : "An unknown error occurred.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Handle task submit (Tasks mode AI agent) ──────────────
+
+  const handleTaskSubmit = async (query: string): Promise<void> => {
+    if (!isConfigured) {
+      setStatus({
+        type: "warning",
+        text: "Connect Supabase from Settings to enable task staging.",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setStatus(null);
+
+    try {
+      const res = await fetch("/api/tasks/execute", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+
+      const data = (await res.json()) as {
+        success?:   boolean;
+        commandId?: string;
+        tool?:      string;
+        message?:   string;
+        error?:     string;
+      };
+
+      if (!res.ok) throw new Error(data.error ?? "Task staging failed.");
+
+      setStatus({
+        type: "success",
+        text: "Request sent for approval – check the drawer.",
+      });
+    } catch (err: unknown) {
+      setStatus({
+        type: "error",
+        text: err instanceof Error ? err.message : "Task agent failed.",
       });
     } finally {
       setIsLoading(false);
@@ -359,16 +368,15 @@ export default function CognitiveRouter(): React.ReactElement {
               refreshTrigger={statsRefreshTrigger}
             />
 
-            {/* Memory Input */}
+            {/* Memory / Task Input */}
             <div className="mb-6">
               <MemoryInput
                 onSubmit={handleSubmit}
+                onTaskSubmit={handleTaskSubmit}
                 isLoading={isLoading}
                 onRecordingChange={setIsRecording}
                 prefillText={prefillText}
                 onPrefillConsumed={() => setPrefillText(undefined)}
-                mode={inputMode}
-                onModeChange={setInputMode}
               />
             </div>
 
@@ -383,7 +391,6 @@ export default function CognitiveRouter(): React.ReactElement {
                 </h2>
 
                 <div className="flex items-center gap-3">
-                  {/* ── SEMANTIC ENGINE STATUS BADGE ── */}
                   <SemanticEngineIndicator />
 
                   {ledgers.length > 0 && (
