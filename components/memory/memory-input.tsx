@@ -197,7 +197,7 @@ export function MemoryInput({
     if (!trimmed || isLoading) return;
     const deviceType = detectDeviceType();
     const timezone = detectTimezone();
-    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined, mode);
+    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined);
     setContent("");
   };
 
