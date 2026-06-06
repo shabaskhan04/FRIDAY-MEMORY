@@ -44,13 +44,14 @@ interface MemoryInputProps {
     content: string,
     deviceType: string,
     timezone: string,
-    location?: LocationData,
-    mode?: InputMode
+    location?: LocationData
   ) => Promise<void>;
   isLoading: boolean;
   onRecordingChange?: (isRecording: boolean) => void;
   prefillText?: string;
   onPrefillConsumed?: () => void;
+  mode?: InputMode;
+  onModeChange?: (mode: InputMode) => void;
 }
 
 function detectDeviceType(): "mobile" | "desktop" {
@@ -97,9 +98,13 @@ export function MemoryInput({
   onRecordingChange,
   prefillText,
   onPrefillConsumed,
+  mode,
+  onModeChange,
 }: MemoryInputProps) {
   const [content, setContent] = useState("");
-  const [mode, setMode] = useState<InputMode>("memory");
+  const [internalMode, setInternalMode] = useState<InputMode>("memory");
+  const activeMode = mode ?? internalMode;
+  const handleModeChange = (m: InputMode) => { setInternalMode(m); onModeChange?.(m); };
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -255,9 +260,9 @@ export function MemoryInput({
           disabled={isLoading}
           placeholder={
             isRecording ? "Listening..." :
-            mode === "gmail"    ? "e.g. Email john@acme.com about the project update..." :
-            mode === "calendar" ? "e.g. Team standup tomorrow at 10am for 30 mins..." :
-            mode === "task"     ? "e.g. Buy groceries by Friday..." :
+            activeMode === "gmail"    ? "e.g. Email john@acme.com about the project update..." :
+            activeMode === "calendar" ? "e.g. Team standup tomorrow at 10am for 30 mins..." :
+            activeMode === "task"     ? "e.g. Buy groceries by Friday..." :
             "Enter a memory..."
           }
           className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
@@ -270,17 +275,17 @@ export function MemoryInput({
             onClick={() => setDropdownOpen((v) => !v)}
             className={cn(
               "flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-medium transition-all duration-200",
-              mode === "memory"   && "bg-primary/10 text-primary",
-              mode === "gmail"    && "bg-amber-500/10 text-amber-400",
-              mode === "calendar" && "bg-blue-500/10 text-blue-400",
-              mode === "task"     && "bg-emerald-500/10 text-emerald-400",
+              activeMode === "memory"   && "bg-primary/10 text-primary",
+              activeMode === "gmail"    && "bg-amber-500/10 text-amber-400",
+              activeMode === "calendar" && "bg-blue-500/10 text-blue-400",
+              activeMode === "task"     && "bg-emerald-500/10 text-emerald-400",
             )}
           >
-            {mode === "memory"   && <Brain className="h-3 w-3" />}
-            {mode === "gmail"    && <Mail className="h-3 w-3" />}
-            {mode === "calendar" && <CalendarIcon className="h-3 w-3" />}
-            {mode === "task"     && <CheckSquare className="h-3 w-3" />}
-            <span className="capitalize">{mode}</span>
+            {activeMode === "memory"   && <Brain className="h-3 w-3" />}
+            {activeMode === "gmail"    && <Mail className="h-3 w-3" />}
+            {activeMode === "calendar" && <CalendarIcon className="h-3 w-3" />}
+            {activeMode === "task"     && <CheckSquare className="h-3 w-3" />}
+            <span className="capitalize">{activeMode}</span>
             <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", dropdownOpen && "rotate-180")} />
           </button>
 
@@ -295,10 +300,10 @@ export function MemoryInput({
                 <button
                   key={value}
                   type="button"
-                  onClick={() => { setMode(value); setDropdownOpen(false); }}
+                  onClick={() => { handleModeChange(value); setDropdownOpen(false); }}
                   className={cn(
                     "flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors",
-                    mode === value
+                    activeMode === value
                       ? "bg-secondary text-foreground font-medium"
                       : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
                   )}
