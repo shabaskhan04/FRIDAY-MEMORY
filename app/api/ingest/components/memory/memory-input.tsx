@@ -44,13 +44,14 @@ interface MemoryInputProps {
     content: string,
     deviceType: string,
     timezone: string,
-    location?: LocationData,
-    mode?: InputMode
+    location?: LocationData
   ) => Promise<void>;
   isLoading: boolean;
   onRecordingChange?: (isRecording: boolean) => void;
   prefillText?: string;
   onPrefillConsumed?: () => void;
+  mode: InputMode;
+  onModeChange: (mode: InputMode) => void;
 }
 
 function detectDeviceType(): "mobile" | "desktop" {
@@ -111,9 +112,10 @@ export function MemoryInput({
   onRecordingChange,
   prefillText,
   onPrefillConsumed,
+  mode,
+  onModeChange,
 }: MemoryInputProps) {
   const [content, setContent] = useState("");
-  const [mode, setMode] = useState<InputMode>("memory");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -218,7 +220,7 @@ export function MemoryInput({
     if (!trimmed || isLoading) return;
     const deviceType = detectDeviceType();
     const timezone = detectTimezone();
-    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined, mode);
+    await onSubmit(trimmed, deviceType, timezone, locationData ?? undefined);
     setContent("");
   };
 
@@ -310,7 +312,7 @@ export function MemoryInput({
                   <button
                     key={value}
                     type="button"
-                    onClick={() => { setMode(value); setDropdownOpen(false); }}
+                    onClick={() => { onModeChange(value); setDropdownOpen(false); }}
                     className={cn(
                       "flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors",
                       mode === value

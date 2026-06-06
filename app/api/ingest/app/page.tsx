@@ -107,6 +107,7 @@ export default function CognitiveRouter(): React.ReactElement {
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [prefillText, setPrefillText]       = useState<string | undefined>(undefined);
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState<number>(0);
+  const [inputMode, setInputMode] = useState<InputMode>("memory");
 
   const isConfigured: boolean = useMemo(() => isSupabaseConfigured(), []);
 
@@ -170,7 +171,6 @@ export default function CognitiveRouter(): React.ReactElement {
     deviceType: string,
     timezone: string,
     location?: LocationData,
-    mode?: InputMode
   ): Promise<void> => {
     if (!isConfigured) {
       setStatus({
@@ -184,18 +184,18 @@ export default function CognitiveRouter(): React.ReactElement {
     setStatus(null);
 
     // ── Action modes: stage via parse-and-stage endpoint ──────────
-    if (mode === "gmail" || mode === "calendar" || mode === "task") {
+    if (inputMode === "gmail" || inputMode === "calendar" || inputMode === "task") {
       try {
         const res = await fetch("/api/commands/stage/parse", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode, content }),
+          body: JSON.stringify({ mode: inputMode, content }),
         });
 
         const data = (await res.json()) as { staged?: boolean; id?: string; error?: string };
         if (!res.ok) throw new Error(data.error ?? "Failed to stage action.");
 
-        const label = mode === "gmail" ? "Email" : mode === "calendar" ? "Event" : "Task";
+        const label = inputMode === "gmail" ? "Email" : inputMode === "calendar" ? "Event" : "Task";
         setStatus({ type: "success", text: `${label} staged — approve it from the action modal` });
       } catch (err: unknown) {
         setStatus({
@@ -367,6 +367,8 @@ export default function CognitiveRouter(): React.ReactElement {
                 onRecordingChange={setIsRecording}
                 prefillText={prefillText}
                 onPrefillConsumed={() => setPrefillText(undefined)}
+                mode={inputMode}
+                onModeChange={setInputMode}
               />
             </div>
 
