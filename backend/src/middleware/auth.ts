@@ -9,7 +9,7 @@ export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const skip = ["/healthz", "/google/callback"];
+  const skip = ["/healthz", "/google/callback", "/google/connect"];
   if (skip.some((p) => request.url.startsWith(p))) return;
 
   const apiSecret = process.env.FRIDAY_API_SECRET;

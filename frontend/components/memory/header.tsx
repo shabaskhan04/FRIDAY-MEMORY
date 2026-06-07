@@ -441,7 +441,7 @@ ${memories.map((m) => {
 
                     {/* Connect / reconnect button */}
                     <a
-                      href={`${process.env.NEXT_PUBLIC_API_URL}/google/connect`}
+                      href={`${process.env.NEXT_PUBLIC_FRIDAY_API_URL ?? "https://api.shabaskhan.me"}/google/connect`}
                       className={cn(
                         "flex w-full items-center justify-between rounded-xl p-3 text-sm transition-colors",
                         googleStatus === "connected"
