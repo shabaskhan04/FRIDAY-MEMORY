@@ -1,4 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
+import { timingSafeEqual } from "crypto";
 
 /**
  * Validates the Authorization: Bearer <FRIDAY_API_SECRET> header.
@@ -20,7 +21,12 @@ export async function authMiddleware(
   const authHeader = request.headers["authorization"] ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 
-  if (!token || token !== apiSecret) {
+  const valid =
+    token.length > 0 &&
+    token.length === apiSecret.length &&
+    timingSafeEqual(Buffer.from(token), Buffer.from(apiSecret));
+
+  if (!valid) {
     reply.code(401).send({ error: "Unauthorized." });
   }
 }

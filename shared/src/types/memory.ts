@@ -44,6 +44,7 @@ export interface IngestResponse {
   entity_count: number;
   task_count: number;
   embedding_stored: boolean;
+  graph_ingested: boolean;
 }
 
 // ============================================================

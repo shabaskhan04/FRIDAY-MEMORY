@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { getGroqClient } from "../lib/groq";
 import { generateEmbedding } from "../lib/embeddings";
-import { createServiceClient } from "../lib/supabase";
+import { createServiceClient, getFridayUserId } from "../lib/supabase";
+import { getGraphService, getActivityService } from "../lib/intelligence";
 import type {
   IngestRequestBody,
   IngestResponse,
@@ -240,6 +241,37 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     if (embeddingResult.error)
       console.error("[ingest] ledger_embeddings write error:", embeddingResult.error);
 
+    // Graph ingestion — awaited so failures are visible in the response
+    let graph_ingested = false;
+    try {
+      await getGraphService().ingestMemory(getFridayUserId(), content, rawLedgerId);
+      graph_ingested = true;
+    } catch (err) {
+      console.error("[ingest] graph ingest error:", err);
+    }
+
+    // Activity pipeline — fire-and-forget (non-blocking, non-critical)
+    getActivityService()
+      .processObservations(getFridayUserId(), [{
+        id: rawLedgerId,
+        user_id: getFridayUserId(),
+        source: 'MANUAL',
+        event_type: intentTag,
+        title: content.slice(0, 120),
+        description: content,
+        occurred_at: new Date().toISOString(),
+        importance_score: 0.5,
+        confidence_score: 0.8,
+        categories: [],
+        metadata: { raw_ledger_id: rawLedgerId },
+        related_entities: entityUpdates.map(e => e.name),
+        is_processed: false,
+        signal_quality_score: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }])
+      .catch(err => console.error("[ingest] activity pipeline error:", err));
+
     const response: IngestResponse = {
       success: true,
       raw_ledger_id: rawLedgerId,
@@ -248,6 +280,7 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       entity_count: entityUpdates.length,
       task_count: extractedTasks.length,
       embedding_stored: embeddingVector !== null && !embeddingResult.error,
+      graph_ingested,
     };
 
     return reply.code(200).send(response);

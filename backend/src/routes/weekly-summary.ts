@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../lib/groq";
 import { createServiceClient } from "../lib/supabase";
+import { getAIRouter } from "../lib/intelligence";
 import type { WeeklySummary } from "@friday/shared";
 
 const SUMMARY_SYSTEM_PROMPT = `You are Friday's weekly digest engine. Analyse the user's week of memories and produce a structured JSON summary.
@@ -26,7 +26,6 @@ Rules:
  */
 export async function generateWeeklySummary(): Promise<WeeklySummary> {
   const supabase = createServiceClient();
-  const groq = getGroqClient();
 
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 
@@ -112,18 +111,10 @@ Total memories: ${rawMemories.length}
 MEMORIES:
 ${memoriesBlock}${temporalBlock}${entityBlock}${todoBlock}`;
 
-  const completion = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    response_format: { type: "json_object" },
-    max_tokens: 1024,
+  const raw = await getAIRouter().generate("weekly_review", SUMMARY_SYSTEM_PROMPT, prompt, {
+    maxTokens: 1024,
     temperature: 0.3,
-    messages: [
-      { role: "system", content: SUMMARY_SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
   });
-
-  const raw = completion.choices[0]?.message?.content ?? "{}";
   const cleaned = raw.replace(/```json|```/g, "").trim();
 
   type SummaryRaw = {

@@ -15,6 +15,18 @@ import { commandsRoutes } from "./routes/commands/index";
 import { googleRoutes } from "./routes/google/index";
 import { peopleRoutes } from "./routes/people";
 import { todosRoutes } from "./routes/todos";
+import { graphPathRoutes } from "./routes/graph/path";
+import { graphProfileRoutes } from "./routes/graph/profile";
+import { graphAnalyticsRoutes } from "./routes/graph/analytics";
+import { graphEvidenceRoutes } from "./routes/graph/evidence";
+import { graphTemporalRoutes } from "./routes/graph/temporal";
+import { graphExportRoutes } from "./routes/graph/export";
+import { graphPlannerRoutes } from "./routes/graph/planner";
+import { observationRoutes } from "./routes/observation";
+import { reviewRoutes } from "./routes/review";
+import { ingestionRoutes } from "./routes/ingestion";
+import { twinRoutes } from "./routes/twin";
+import { causalRoutes } from "./routes/causal";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -71,6 +83,18 @@ async function build() {
   await app.register(googleRoutes);
   await app.register(peopleRoutes);
   await app.register(todosRoutes);
+  await app.register(graphPathRoutes);
+  await app.register(graphProfileRoutes);
+  await app.register(graphAnalyticsRoutes);
+  await app.register(graphEvidenceRoutes);
+  await app.register(graphTemporalRoutes);
+  await app.register(graphExportRoutes);
+  await app.register(graphPlannerRoutes);
+  await app.register(observationRoutes);
+  await app.register(reviewRoutes);
+  await app.register(ingestionRoutes);
+  await app.register(twinRoutes);
+  await app.register(causalRoutes);
 
   return app;
 }

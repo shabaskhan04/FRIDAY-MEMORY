@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../../lib/groq";
 import { generateEmbedding, toVectorLiteral } from "../../lib/embeddings";
 import { createServiceClient } from "../../lib/supabase";
 import { analyzeQuery } from "../../lib/queryAnalyzer";
+import { getGraphService, getAIRouter } from "../../lib/intelligence";
+import { getFridayUserId } from "../../lib/supabase";
 import type { AskRequestBody, AskResponse, CitedMemory } from "@friday/shared";
 
 const ENTITY_BOOST = 0.4;
@@ -22,21 +23,35 @@ type ScoredRow = {
   matched_entities: string[];
 };
 
-function buildSystemPrompt(): string {
-  return `You are Friday, a personal memory assistant.
+function buildSystemPrompt(graphSummary?: string): string {
+  const graphSection = graphSummary ? `\
+## Knowledge Graph (PRIMARY SOURCE — use this first)
+${graphSummary}
 
-You will be given a list of the user's memories (numbered with IDs) and a question.
+When the question asks about relationships, connections, or how entities are linked:
+- Answer DIRECTLY from the graph relationships above.
+- Explicitly name the relationship type (e.g. BUSINESS_PARTNER, OWNS, WORKS_WITH).
+- Describe the graph path that connects the entities.
+- Do NOT paraphrase graph facts into vague prose.
+
+` : "";
+
+  return `You are Friday, a personal memory assistant.
+${graphSection}\
+You will also be given a list of the user's memories (numbered with IDs).
 
 Your task:
-1. Answer the question using ONLY the provided memories. Do not use outside knowledge.
-2. Be direct, warm, and specific — reference concrete details from the memories.
+1. ${graphSummary
+    ? "If the Knowledge Graph above contains relevant relationships, answer from the graph FIRST. Use memories only to add supporting detail or context."
+    : "Answer the question using ONLY the provided memories. Do not use outside knowledge."}
+2. Be direct, warm, and specific — reference concrete details.
 3. When memories mention a specific person, project, or topic related to the question, prioritize those.
 4. Identify recurring patterns across memories when relevant.
 5. Include relevant dates or timeframes when available.
 6. At the end of your answer, include a JSON block (and nothing else after it) in this exact format:
    {"cited_ids": ["id1", "id2", ...]}
    Only cite IDs you actually used. Max 5 citations.
-7. If the memories don't contain enough information, say so honestly.
+7. If neither the graph nor memories contain enough information, say so honestly.
 
 Format: 2-4 sentences of answer, then the JSON block on its own line.`;
 }
@@ -48,7 +63,6 @@ export async function memoryAskRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const supabase = createServiceClient();
-      const groq = getGroqClient();
 
       const analysis = await analyzeQuery(query, supabase);
       const { weights, entities } = analysis;
@@ -126,17 +140,29 @@ export async function memoryAskRoutes(app: FastifyInstance): Promise<void> {
 
       const userPrompt = `Query: "${query}"\nQuery type: ${analysis.queryType}${entityContext}\n\nMEMORIES:\n${memoriesText}\n\nQUESTION: ${query}`;
 
-      const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 700,
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: buildSystemPrompt() },
-          { role: "user", content: userPrompt },
-        ],
-      });
+      // Attempt to enrich system prompt with graph context (primary source for relationship queries)
+      let graphSummary = "";
+      try {
+        console.log("[ASK USER ID]", getFridayUserId());
+        console.log("[ASK QUERY]", query);
+        const ctx = await getGraphService().buildQueryContext(
+          getFridayUserId(), query, embeddingVec, 8,
+        );
+        console.log("========== GRAPH CONTEXT ==========");
+        console.log(ctx);
+        console.log("===================================");
+        if (ctx.summary) graphSummary = ctx.summary;
+      } catch {
+        // Graph context is best-effort — never fail Ask Friday
+      }
 
-      const raw = completion.choices[0]?.message?.content ?? "";
+      const systemPrompt = buildSystemPrompt(graphSummary || undefined);
+      console.log("[GRAPH SUMMARY SENT TO LLM]", graphSummary || "(none)");
+
+      const raw = await getAIRouter().generate("ask_friday", systemPrompt, userPrompt, {
+        maxTokens: 700,
+        temperature: 0.3,
+      });
       let answer = raw.trim();
       let cited_ids: string[] = [];
 
