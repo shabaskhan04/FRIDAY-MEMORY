@@ -1,9 +1,9 @@
 import "dotenv/config";
 
-// Validate required env vars at startup
+// Warn on missing env vars at startup (don't crash — log clearly)
 const REQUIRED_ENV = ["FRIDAY_API_SECRET", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "FRIDAY_USER_ID", "FRONTEND_URL"] as const;
 for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) throw new Error(`[startup] Missing required env var: ${key}`);
+  if (!process.env[key]) console.warn(`[startup] WARNING: Missing env var: ${key}`);
 }
 import Fastify from "fastify";
 import cors from "@fastify/cors";
