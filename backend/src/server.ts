@@ -1,4 +1,10 @@
 import "dotenv/config";
+
+// Validate required env vars at startup
+const REQUIRED_ENV = ["FRIDAY_API_SECRET", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "FRIDAY_USER_ID", "FRONTEND_URL"] as const;
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) throw new Error(`[startup] Missing required env var: ${key}`);
+}
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";

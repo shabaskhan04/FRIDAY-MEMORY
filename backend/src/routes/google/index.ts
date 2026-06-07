@@ -38,7 +38,7 @@ export async function googleRoutes(app: FastifyInstance): Promise<void> {
       const { code, error: oauthError } = request.query;
 
       const frontendUrl =
-        process.env.ALLOWED_ORIGIN ?? "http://localhost:3000";
+        process.env.FRONTEND_URL ?? "http://localhost:3000";
 
       if (oauthError || !code) {
         console.error("[google/callback] OAuth error:", oauthError);
