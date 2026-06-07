@@ -1,0 +1,57 @@
+version: "3.9"
+
+# Local development stack.
+# Mirrors the production split: Vercel (Next.js) + DigitalOcean (backend).
+#
+# Usage:
+#   docker compose up backend          # starts backend only
+#   docker compose up                  # starts backend + redis
+#   docker compose run --rm backend sh # shell into backend container
+#
+# For the frontend, run separately: cd frontend && npm run dev
+# It will call the backend at http://localhost:3001 via NEXT_PUBLIC_FRIDAY_API_URL.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: builder        # use builder stage in dev for hot-reload
+    command: ["npm", "run", "dev"]
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      HOST: "0.0.0.0"
+    env_file:
+      - .env.local            # single .env.local at repo root in dev
+    volumes:
+      - ./backend/src:/app/src       # hot-reload source changes
+      - ./shared/src:/app/shared/src # hot-reload shared changes
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+# Optional: uncomment to run the full frontend in Docker too
+#  frontend:
+#    build:
+#      context: ./frontend
+#    ports:
+#      - "3000:3000"
+#    env_file:
+#      - .env.local
+#    depends_on:
+#      - backend

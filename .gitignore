@@ -1,25 +1,27 @@
-# Next.js
-.next/
-out/
-build/
-
-# Dependencies
-node_modules/
-
-# Environment — NEVER commit this
+# ── Environment ───────────────────────────────────────────────
 .env.local
-.env*.local
+.env.*.local
+*.env
 
-# OS
-.DS_Store
-Thumbs.db
+# ── Node ──────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
 
-# Logs
+# ── Build outputs ─────────────────────────────────────────────
+shared/dist/
+backend/dist/
+frontend/.next/
+frontend/out/
+
+# ── Logs ──────────────────────────────────────────────────────
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+logs/
+~logs/
 
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
+# ── PM2 ───────────────────────────────────────────────────────
+.pm2/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
