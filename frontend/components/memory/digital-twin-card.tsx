@@ -1,50 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Cpu, RefreshCw, Trophy, FolderGit, ShieldAlert, Zap, Loader2 } from "lucide-react";
+import { Cpu, RefreshCw, Trophy, FolderGit, Users, ShieldAlert, Zap, Loader2 } from "lucide-react";
 import { getDigitalTwinProfile, rebuildDigitalTwin } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 function renderSummaryContent(summary: string) {
   if (!summary) {
-    return <p className="text-sm text-muted-foreground leading-relaxed italic">"Cognitive profile summary processing..."</p>;
+    return <p className="text-sm text-muted-foreground leading-relaxed italic">Cognitive profile summary processing…</p>;
   }
 
   let cleaned = summary.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "");
-  }
+  // Strip markdown code block markers
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (typeof parsed !== "object" || parsed === null) {
-      throw new Error("Not a JSON object");
-    }
+    if (typeof parsed !== "object" || parsed === null) throw new Error();
 
     return (
       <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
         {Object.entries(parsed).map(([key, value]) => {
-          const formattedKey = key
-            .split(/[_-]/)
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
+          const label = key.split(/[_-]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
-          if (typeof value === "object" && value !== null) {
+          if (typeof value === "object" && value !== null && !Array.isArray(value)) {
             return (
               <div key={key} className="space-y-1">
-                <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider block">{formattedKey}</span>
+                <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider block">{label}</span>
                 <div className="pl-3.5 space-y-1.5 border-l border-primary/20">
                   {Object.entries(value).map(([subKey, subValue]) => {
-                    const formattedSubKey = subKey
-                      .split(/[_-]/)
-                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(" ");
+                    const subLabel = subKey.split(/[_-]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
                     return (
                       <div key={subKey} className="flex justify-between items-start gap-4">
-                        <span className="text-muted-foreground/80">{formattedSubKey}:</span>
+                        <span className="text-muted-foreground/80">{subLabel}:</span>
                         <span className="font-medium text-foreground text-right">
                           {Array.isArray(subValue) ? subValue.join(", ") : String(subValue)}
                         </span>
@@ -58,8 +47,8 @@ function renderSummaryContent(summary: string) {
 
           return (
             <div key={key} className="flex justify-between items-start gap-4">
-              <span className="font-semibold text-foreground">{formattedKey}:</span>
-              <span className="font-medium text-muted-foreground text-right">
+              <span className="font-semibold text-foreground">{label}:</span>
+              <span className="text-muted-foreground text-right">
                 {Array.isArray(value) ? value.join(", ") : String(value)}
               </span>
             </div>
@@ -67,8 +56,8 @@ function renderSummaryContent(summary: string) {
         })}
       </div>
     );
-  } catch (e) {
-    return <p className="text-sm text-muted-foreground leading-relaxed italic">"{summary}"</p>;
+  } catch {
+    return <p className="text-sm text-muted-foreground leading-relaxed">{summary}</p>;
   }
 }
 
@@ -95,8 +84,9 @@ export function DigitalTwinCard() {
   const handleRebuild = async () => {
     setIsRebuilding(true);
     try {
-      const model = await rebuildDigitalTwin();
-      setProfile(model);
+      await rebuildDigitalTwin();
+      // Re-fetch the flat profile shape from GET /twin/profile
+      await fetchProfile();
     } catch (err) {
       console.error("Rebuild failed:", err);
     } finally {
@@ -125,16 +115,20 @@ export function DigitalTwinCard() {
     );
   }
 
+  const displayName = profile.display_name?.trim() || "Your Digital Twin";
+  const topProjects: string[] = profile.top_projects ?? [];
+  const topPeople: string[] = profile.top_people ?? [];
+  const topGoals: string[] = profile.top_goals ?? [];
+
   return (
     <div className="rounded-2xl glass-card p-5 relative overflow-hidden space-y-4">
-      {/* Background radial gradient decoration */}
       <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/5 via-transparent to-primary/5 pointer-events-none" />
 
       {/* Header */}
       <div className="flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
           <Cpu className="h-5 w-5 text-primary" />
-          <h3 className="text-base font-semibold text-foreground">AI Digital Twin</h3>
+          <h3 className="text-base font-semibold text-foreground">{displayName}</h3>
         </div>
         <Button
           variant="outline"
@@ -144,7 +138,7 @@ export function DigitalTwinCard() {
           className="h-8 px-2 text-xs"
         >
           <RefreshCw className={`h-3 w-3 mr-1 ${isRebuilding ? "animate-spin" : ""}`} />
-          Rebuild
+          {isRebuilding ? "Rebuilding…" : "Rebuild"}
         </Button>
       </div>
 
@@ -173,37 +167,51 @@ export function DigitalTwinCard() {
 
       {/* Lists */}
       <div className="space-y-3 relative z-10 pt-1">
-        {profile.top_goals?.length > 0 && (
+        {topGoals.length > 0 && (
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
               <Trophy className="h-3.5 w-3.5 text-warning/80" />
               <span>Top Focus Goals</span>
             </div>
             <div className="flex flex-wrap gap-1">
-              {profile.top_goals.map((g: string, idx: number) => (
-                <Badge key={idx} variant="outline" className="text-[10px] bg-secondary/20">
-                  {g}
-                </Badge>
+              {topGoals.map((g, idx) => (
+                <Badge key={idx} variant="outline" className="text-[10px] bg-secondary/20">{g}</Badge>
               ))}
             </div>
           </div>
         )}
 
-        {profile.top_projects?.length > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <FolderGit className="h-3.5 w-3.5 text-primary/80" />
-              <span>Key Projects</span>
-            </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <FolderGit className="h-3.5 w-3.5 text-primary/80" />
+            <span>Key Projects</span>
+          </div>
+          {topProjects.length > 0 ? (
             <div className="flex flex-wrap gap-1">
-              {profile.top_projects.map((p: string, idx: number) => (
-                <Badge key={idx} variant="outline" className="text-[10px] bg-secondary/20">
-                  {p}
-                </Badge>
+              {topProjects.map((p, idx) => (
+                <Badge key={idx} variant="outline" className="text-[10px] bg-secondary/20">{p}</Badge>
               ))}
             </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground/60 pl-0.5">No data yet</p>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <Users className="h-3.5 w-3.5 text-green-500/80" />
+            <span>Key People</span>
           </div>
-        )}
+          {topPeople.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {topPeople.map((p, idx) => (
+                <Badge key={idx} variant="outline" className="text-[10px] bg-secondary/20">{p}</Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground/60 pl-0.5">No data yet</p>
+          )}
+        </div>
       </div>
 
       <div className="text-[10px] text-muted-foreground/60 text-right pt-2 border-t border-border/40">

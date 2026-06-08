@@ -33,8 +33,8 @@ export class DigitalTwinService {
 
   async generateSelfModel(userId: string): Promise<SelfModel> {
     const [nodes, observations, decisions] = await Promise.all([
-      this.graphService.getMostImportantNodes(userId, 30),
-      this.obsService.listRecent(userId, 100),
+      this.graphService.getMostImportantNodes(userId, 30).catch(() => [] as any[]),
+      this.obsService.listRecent(userId, 100).catch(() => [] as any[]),
       this.decisionService.listDecisions(userId).catch(() => [] as any[]),
     ]);
 

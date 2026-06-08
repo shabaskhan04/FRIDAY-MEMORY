@@ -135,10 +135,13 @@ export class ActivityService {
           }
         }
 
-        // Rebuild twin model and causal pattern discovery
-        await Promise.all([
-          digitalTwinService.generateSelfModel(userId),
-          causalReasoningService.discoverCausalPatterns(userId),
+        // Rebuild twin model and causal pattern discovery — run independently
+        // so a failure in one does not prevent the other from completing.
+        await Promise.allSettled([
+          digitalTwinService.generateSelfModel(userId)
+            .catch(err => console.error("[ActivityService] Twin model rebuild failed:", err)),
+          causalReasoningService.discoverCausalPatterns(userId)
+            .catch(err => console.error("[ActivityService] Causal pattern discovery failed:", err)),
         ]);
       } catch (err) {
         console.error("[ActivityService] Downstream live updates failed:", err);
