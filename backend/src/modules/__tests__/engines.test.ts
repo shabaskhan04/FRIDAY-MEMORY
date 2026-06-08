@@ -127,11 +127,12 @@ describe('decision.scoring', () => {
 describe('DecisionEvaluationEngine', () => {
   function makeRepo(d: Decision, existingEvals: DecisionEvaluation[] = []) {
     return {
-      getById:           vi.fn(() => Promise.resolve(d)),
-      saveEvaluation:    vi.fn((_id: string, input: any) => Promise.resolve({ id: 'eval-new', decision_id: d.id, ...input, evaluated_at: new Date().toISOString() })),
-      update:            vi.fn(() => Promise.resolve(d)),
-      getEvaluations:    vi.fn(() => Promise.resolve(existingEvals)),
+      getById:             vi.fn(() => Promise.resolve(d)),
+      saveEvaluation:      vi.fn((_id: string, input: any) => Promise.resolve({ id: 'eval-new', decision_id: d.id, ...input, evaluated_at: new Date().toISOString() })),
+      update:              vi.fn(() => Promise.resolve(d)),
+      getEvaluations:      vi.fn(() => Promise.resolve(existingEvals)),
       getLatestEvaluation: vi.fn(() => Promise.resolve(existingEvals[0] ?? null)),
+      getDecisionEntities: vi.fn(() => Promise.resolve([])),
     } as any;
   }
 

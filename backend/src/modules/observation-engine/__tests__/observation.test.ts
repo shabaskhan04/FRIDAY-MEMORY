@@ -11,6 +11,13 @@ import { ObservationProcessor }    from '../observation.processor';
 import { ObservationInsights }     from '../observation-insights';
 import type { Observation, CreateObservationInput } from '../observation.types';
 
+// Mock intelligence layer to avoid real service instantiations in test environment
+vi.mock('../../lib/intelligence', () => ({
+  getActivityService: () => ({
+    processObservations: vi.fn(() => Promise.resolve([])),
+  }),
+}));
+
 // ============================================================
 // Fixtures
 // ============================================================
@@ -28,6 +35,7 @@ function obs(overrides: Partial<Observation> = {}): Observation {
     importance_score: 0.5, confidence_score: 1.0,
     categories: ['WORK'], metadata: {}, related_entities: [],
     is_processed: false,
+    signal_quality_score: 0.8,
     created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     ...overrides,
   };
@@ -37,6 +45,7 @@ function input(overrides: Partial<CreateObservationInput> = {}): CreateObservati
   return {
     user_id: UID, source: 'MANUAL', event_type: 'note',
     title: 'Worked on Orin',
+    categories: [],
     ...overrides,
   };
 }
@@ -48,71 +57,121 @@ function input(overrides: Partial<CreateObservationInput> = {}): CreateObservati
 describe('ObservationClassifier', () => {
   const clf = new ObservationClassifier();
 
-  it('GIT_COMMIT → primary WORK, secondary PROJECT', () => {
-    const r = clf.classify('GIT_COMMIT', 'feat: add scholarship matching to Orin');
+  it('GIT_COMMIT → primary WORK, secondary PROJECT', async () => {
+    const r = await clf.classify('GIT_COMMIT', 'feat: add scholarship matching to Orin');
     expect(r.primary_category).toBe('WORK');
     expect(r.categories).toContain('PROJECT');
   });
 
-  it('HEALTH_UPDATE → primary HEALTH, high confidence', () => {
-    const r = clf.classify('HEALTH_UPDATE', 'Body fat measured at 15%');
+  it('HEALTH_UPDATE → primary HEALTH, high confidence', async () => {
+    const r = await clf.classify('HEALTH_UPDATE', 'Body fat measured at 15%');
     expect(r.primary_category).toBe('HEALTH');
     expect(r.confidence).toBeGreaterThan(0.9);
   });
 
-  it('REVENUE_EVENT → primary FINANCE', () => {
-    const r = clf.classify('REVENUE_EVENT', 'Khan Designs invoice paid');
+  it('REVENUE_EVENT → primary FINANCE', async () => {
+    const r = await clf.classify('REVENUE_EVENT', 'Khan Designs invoice paid');
     expect(r.primary_category).toBe('FINANCE');
   });
 
-  it('PROJECT_MILESTONE → primary PROJECT, high confidence', () => {
-    const r = clf.classify('PROJECT_MILESTONE', 'Orin beta shipped to first users');
+  it('PROJECT_MILESTONE → primary PROJECT, high confidence', async () => {
+    const r = await clf.classify('PROJECT_MILESTONE', 'Orin beta shipped to first users');
     expect(r.primary_category).toBe('PROJECT');
     expect(r.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('MANUAL with gym keyword → adds HEALTH category', () => {
-    const r = clf.classify('MANUAL', 'Did a gym session and hit 3 sets');
+  it('MANUAL with gym keyword → adds HEALTH category', async () => {
+    const r = await clf.classify('MANUAL', 'Did a gym session and hit 3 sets');
     expect(r.categories).toContain('HEALTH');
   });
 
-  it('MANUAL with Orin keyword → adds PROJECT category', () => {
-    const r = clf.classify('MANUAL', 'Spent 3 hours working on Orin today');
+  it('MANUAL with Orin keyword → adds PROJECT category', async () => {
+    const r = await clf.classify('MANUAL', 'Spent 3 hours working on Orin today');
     expect(r.categories).toContain('PROJECT');
   });
 
-  it('MANUAL with revenue keyword → adds FINANCE category', () => {
-    const r = clf.classify('MANUAL', 'Received payment for Khan Designs invoice');
+  it('MANUAL with revenue keyword → adds FINANCE category', async () => {
+    const r = await clf.classify('MANUAL', 'Received payment for Khan Designs invoice');
     expect(r.categories).toContain('FINANCE');
   });
 
-  it('BOOK_READING → primary LEARNING, secondary PERSONAL', () => {
-    const r = clf.classify('BOOK_READING', 'Read 30 pages of Atomic Habits');
+  it('BOOK_READING → primary LEARNING, drops PERSONAL', async () => {
+    const r = await clf.classify('BOOK_READING', 'Read 30 pages of Atomic Habits');
     expect(r.primary_category).toBe('LEARNING');
-    expect(r.categories).toContain('PERSONAL');
+    expect(r.categories).not.toContain('PERSONAL');
   });
 
-  it('APP_USAGE → primary SYSTEM', () => {
-    const r = clf.classify('APP_USAGE', 'Used VS Code for 4 hours');
+  it('APP_USAGE → primary SYSTEM', async () => {
+    const r = await clf.classify('APP_USAGE', 'Used VS Code for 4 hours');
     expect(r.primary_category).toBe('SYSTEM');
   });
 
-  it('SOCIAL_INTERACTION → primary SOCIAL', () => {
-    const r = clf.classify('SOCIAL_INTERACTION', 'Lunch with Nidha');
+  it('SOCIAL_INTERACTION → primary SOCIAL', async () => {
+    const r = await clf.classify('SOCIAL_INTERACTION', 'Lunch with Nidha');
     expect(r.primary_category).toBe('SOCIAL');
   });
 
-  it('multi-label: GIT_COMMIT about Orin → WORK + PROJECT', () => {
-    const r = clf.classify('GIT_COMMIT', 'fix: scholarship scraper for Orin');
+  it('multi-label: GIT_COMMIT about Orin → WORK + PROJECT', async () => {
+    const r = await clf.classify('GIT_COMMIT', 'fix: scholarship scraper for Orin');
     expect(r.categories).toContain('WORK');
     expect(r.categories).toContain('PROJECT');
     expect(r.categories.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('confidence decreases slightly with more labels', () => {
-    const single = clf.classify('GIT_COMMIT', 'Minor cleanup');
-    const multi  = clf.classify('GIT_COMMIT', 'Orin scholarship update for revenue goal');
+  it('confidence decreases slightly with more labels', async () => {
+    const single = await clf.classify('GIT_COMMIT', 'Minor cleanup');
+    const multi  = await clf.classify('GIT_COMMIT', 'Orin scholarship update for revenue goal');
     expect(single.confidence).toBeGreaterThanOrEqual(multi.confidence);
+  });
+
+  it('Priority resolution: MANUAL with gym and work keywords → primary WORK, no PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Did a gym session then worked on code');
+    expect(r.primary_category).toBe('WORK');
+    expect(r.categories).toContain('WORK');
+    expect(r.categories).toContain('HEALTH');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL about FRIDAY integration with Shanavas Khan → WORK + PROJECT classification', async () => {
+    const r = await clf.classify('MANUAL', 'Worked with Shanavas Khan on the FRIDAY integration today. Resolved the circular dependency in the ObservationClassifier and wired it through the new AIRouter gateway.');
+    expect(r.primary_category).toBe('WORK');
+    expect(r.categories).toContain('PROJECT');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL with finance keywords → FINANCE, drops PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Paid 50 dollars for billing and subscription');
+    expect(r.primary_category).toBe('FINANCE');
+    expect(r.categories).toContain('FINANCE');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL with social keywords → SOCIAL, drops PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Chatted and hung out with friends');
+    expect(r.primary_category).toBe('SOCIAL');
+    expect(r.categories).toContain('SOCIAL');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL with learning keywords → LEARNING, drops PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Studied biology and finished the online homework assignment');
+    expect(r.primary_category).toBe('LEARNING');
+    expect(r.categories).toContain('LEARNING');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL with system keywords → SYSTEM, drops PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Installed the OS updates and configured system settings');
+    expect(r.primary_category).toBe('SYSTEM');
+    expect(r.categories).toContain('SYSTEM');
+    expect(r.categories).not.toContain('PERSONAL');
+  });
+
+  it('MANUAL with business planning keywords → PROJECT, drops PERSONAL', async () => {
+    const r = await clf.classify('MANUAL', 'Refining the marketing strategy for the startup pitch');
+    expect(r.primary_category).toBe('PROJECT');
+    expect(r.categories).toContain('PROJECT');
+    expect(r.categories).not.toContain('PERSONAL');
   });
 });
 
@@ -182,11 +241,11 @@ describe('scoreObservationBatch', () => {
 describe('ObservationProcessor', () => {
   function makeRepo(created: Observation) {
     return {
-      create:         vi.fn(() => Promise.resolve(created)),
-      getById:        vi.fn(() => Promise.resolve(created)),
-      update:         vi.fn((_id: string, _uid: string, patch: any) => Promise.resolve({ ...created, ...patch })),
+      create:          vi.fn(() => Promise.resolve(created)),
+      getById:         vi.fn(() => Promise.resolve(created)),
+      update:          vi.fn((_id: string, _uid: string, patch: any) => Promise.resolve({ ...created, ...patch })),
       listUnprocessed: vi.fn(() => Promise.resolve([])),
-      markProcessed:  vi.fn(() => Promise.resolve()),
+      markProcessed:   vi.fn(() => Promise.resolve()),
     } as any;
   }
 
@@ -215,7 +274,11 @@ describe('ObservationProcessor', () => {
   });
 
   it('processBatch() processes all inputs', async () => {
-    const repo = { create: vi.fn((i: Partial<CreateObservationInput>) => Promise.resolve({ ...obs(), ...i })) } as any;
+    const repo = {
+      create:          vi.fn((i: Partial<CreateObservationInput>) => Promise.resolve({ ...obs(), ...i })),
+      listUnprocessed: vi.fn(() => Promise.resolve([])),
+      markProcessed:   vi.fn(() => Promise.resolve()),
+    } as any;
     const proc = new ObservationProcessor(repo, new ObservationClassifier());
 
     const inputs = [
@@ -252,8 +315,6 @@ describe('ObservationInsights', () => {
     return {
       listInRange: vi.fn(() => Promise.resolve(observations)),
       countBySourceInRange: vi.fn((_uid: string, from: Date, to: Date) => {
-        // split into two halves for trend detection
-        const mid    = new Date((from.getTime() + to.getTime()) / 2);
         const counts: Record<string, number> = {};
         for (const o of observations) {
           const t = new Date(o.occurred_at).getTime();
@@ -298,15 +359,6 @@ describe('ObservationInsights', () => {
   });
 
   it('getAttentionDrift: HEALTH gained if more health obs in recent half', async () => {
-    const recent = new Date(NOW.getTime() - 5 * DAY).toISOString();
-    const old    = new Date(NOW.getTime() - 25 * DAY).toISOString();
-
-    const observations = [
-      obs({ source: 'HEALTH_UPDATE', categories: ['HEALTH'], occurred_at: recent }),
-      obs({ source: 'HEALTH_UPDATE', categories: ['HEALTH'], occurred_at: recent }),
-      obs({ source: 'HEALTH_UPDATE', categories: ['HEALTH'], occurred_at: old }),
-    ];
-
     const repo = {
       countByCategoryInRange: vi.fn((_uid: string, from: Date, to: Date) => {
         const mid = new Date(NOW.getTime() - 15 * DAY);
@@ -330,8 +382,8 @@ describe('ObservationInsights', () => {
 describe('Realistic scenario: Friday activity week', () => {
   const clf = new ObservationClassifier();
 
-  it('Orin git commit → WORK + PROJECT', () => {
-    const r = clf.classify('GIT_COMMIT', 'feat: add Orin scholarship scraper v2');
+  it('Orin git commit → WORK + PROJECT', async () => {
+    const r = await clf.classify('GIT_COMMIT', 'feat: add Orin scholarship scraper v2');
     expect(r.categories).toContain('WORK');
     expect(r.categories).toContain('PROJECT');
   });
@@ -345,13 +397,13 @@ describe('Realistic scenario: Friday activity week', () => {
     expect(score.final_score).toBeGreaterThan(0.6);
   });
 
-  it('Chai business planning → BUSINESS/PROJECT classification', () => {
-    const r = clf.classify('MANUAL', 'Planning Chai location near LPU campus');
+  it('Chai business planning → BUSINESS/PROJECT classification', async () => {
+    const r = await clf.classify('MANUAL', 'Planning Chai location near LPU campus');
     expect(r.categories).toContain('PROJECT');
   });
 
-  it('Gym session → HEALTH', () => {
-    const r = clf.classify('HEALTH_UPDATE', 'Gym: 3 sets bench press, weight 82kg');
+  it('Gym session → HEALTH', async () => {
+    const r = await clf.classify('HEALTH_UPDATE', 'Gym: 3 sets bench press, weight 82kg');
     expect(r.primary_category).toBe('HEALTH');
   });
 

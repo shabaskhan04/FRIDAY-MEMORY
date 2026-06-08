@@ -8,7 +8,7 @@ import { getCausalReasoningService } from '../lib/intelligence';
 export async function causalRoutes(app: FastifyInstance): Promise<void> {
   app.get('/causal/patterns', async (_req, reply) => {
     try {
-      const patterns = await getCausalReasoningService().discoverCausalPatterns(getFridayUserId());
+      const patterns = await getCausalReasoningService().getCausalPatterns(getFridayUserId());
       return reply.send(patterns);
     } catch (err) {
       return reply.code(500).send({ error: err instanceof Error ? err.message : 'Failed' });
@@ -17,7 +17,7 @@ export async function causalRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/causal/blockers', async (_req, reply) => {
     try {
-      return reply.send(await getCausalReasoningService().findGoalBlockers(getFridayUserId()));
+      return reply.send(await getCausalReasoningService().findGoalBlockers(getFridayUserId(), false));
     } catch (err) {
       return reply.code(500).send({ error: err instanceof Error ? err.message : 'Failed' });
     }
@@ -25,7 +25,7 @@ export async function causalRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/causal/accelerators', async (_req, reply) => {
     try {
-      return reply.send(await getCausalReasoningService().findGoalAccelerators(getFridayUserId()));
+      return reply.send(await getCausalReasoningService().findGoalAccelerators(getFridayUserId(), false));
     } catch (err) {
       return reply.code(500).send({ error: err instanceof Error ? err.message : 'Failed' });
     }

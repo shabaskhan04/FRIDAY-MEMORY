@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { getGroqClient } from "../lib/groq";
 import { generateEmbedding } from "../lib/embeddings";
 import { createServiceClient, getFridayUserId } from "../lib/supabase";
-import { getGraphService, getActivityService } from "../lib/intelligence";
+import { getGraphService, getActivityService, getAIRouter } from "../lib/intelligence";
 import type {
   IngestRequestBody,
   IngestResponse,
@@ -78,30 +78,26 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     const supabase = createServiceClient();
     const groq = getGroqClient();
 
-    // Run Groq extraction and embedding concurrently
+    // Run Groq extraction and embedding concurrently via AIRouter gateway
     let groqRawJson: string;
     let embeddingVector: number[] | null;
 
     try {
       const [groqResult, embeddingResult] = await Promise.all([
-        groq.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-          max_tokens: 2048,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content },
-          ],
-        }),
-        generateEmbedding(content),
+        getAIRouter().generate(
+          "memory_extraction",
+          SYSTEM_PROMPT,
+          content,
+          { temperature: 0.2, maxTokens: 2048 }
+        ),
+        getAIRouter().embed(content),
       ]);
 
-      groqRawJson = groqResult.choices[0]?.message?.content ?? "{}";
-      embeddingVector = embeddingResult;
+      groqRawJson = groqResult ?? "{}";
+      embeddingVector = embeddingResult[0] ?? null;
     } catch (groqError) {
-      const message = groqError instanceof Error ? groqError.message : "Groq SDK error.";
-      console.error("[ingest] Groq call failed:", groqError);
+      const message = groqError instanceof Error ? groqError.message : "AIRouter Gateway error.";
+      console.error("[ingest] AIRouter Gateway call failed:", groqError);
       return reply.code(502).send({ error: message });
     }
 
@@ -243,17 +239,68 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
 
     // Graph ingestion — awaited so failures are visible in the response
     let graph_ingested = false;
+    let graphResult: { nodes: any[]; edges: any[]; extraction: any } | null = null;
     try {
-      await getGraphService().ingestMemory(getFridayUserId(), content, rawLedgerId);
+      graphResult = await getGraphService().ingestMemory(getFridayUserId(), content, rawLedgerId);
       graph_ingested = true;
     } catch (err) {
       console.error("[ingest] graph ingest error:", err);
     }
 
+    // Dynamic import to avoid circular dependency
+    const { getObservationService } = await import("../lib/intelligence");
+
+    // Resolve entity names to Graph Node UUIDs to feed the Causal Engine
+    const relatedEntities = entityUpdates.map(e => e.name);
+    let sourceNodeId: string | null = null;
+    let targetNodeId: string | null = null;
+
+    try {
+      const nodes = graphResult?.nodes || [];
+      if (nodes.length > 0) {
+        sourceNodeId = nodes[0].id;
+        if (nodes.length > 1) {
+          targetNodeId = nodes[1].id;
+        } else {
+          // If the memory mentions only one entity, set target_node_id to the user's own "Self" node ("You")
+          const userId = getFridayUserId();
+          const { data: existingSelf } = await supabase
+            .from("graph_nodes")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("name", "You")
+            .eq("node_type", "PERSON")
+            .eq("is_archived", false)
+            .maybeSingle();
+
+          if (existingSelf) {
+            targetNodeId = existingSelf.id;
+          } else {
+            const { data: createdSelf } = await supabase
+              .from("graph_nodes")
+              .insert({
+                user_id: userId,
+                name: "You",
+                node_type: "PERSON",
+                aliases: ["Me", "Self"],
+                metadata: {},
+              })
+              .select("id")
+              .single();
+
+            if (createdSelf) {
+              targetNodeId = createdSelf.id;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[ingest] Graph node lookup failed:", e);
+    }
+
     // Activity pipeline — fire-and-forget (non-blocking, non-critical)
-    getActivityService()
-      .processObservations(getFridayUserId(), [{
-        id: rawLedgerId,
+    getObservationService()
+      .observe({
         user_id: getFridayUserId(),
         source: 'MANUAL',
         event_type: intentTag,
@@ -263,14 +310,14 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
         importance_score: 0.5,
         confidence_score: 0.8,
         categories: [],
-        metadata: { raw_ledger_id: rawLedgerId },
-        related_entities: entityUpdates.map(e => e.name),
-        is_processed: false,
-        signal_quality_score: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }])
-      .catch(err => console.error("[ingest] activity pipeline error:", err));
+        metadata: { 
+          raw_ledger_id: rawLedgerId,
+          source_node_id: sourceNodeId,
+          target_node_id: targetNodeId
+        },
+        related_entities: relatedEntities,
+      })
+      .catch(err => console.error("[ingest] observation pipeline error:", err));
 
     const response: IngestResponse = {
       success: true,

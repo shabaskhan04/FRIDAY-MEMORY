@@ -17,6 +17,9 @@ const DAILY_LIMITS: Record<AIFeature, number> = {
   ingestion_normalization:     500,
   twin_model_generation:       10,
   causal_pattern_inference:    50,
+  activity_clustering:         100,
+  daily_reflection:            5,
+  health_analysis:             10,
 };
 
 // Hard token budget per call (Rule #6)
@@ -31,6 +34,9 @@ export const TOKEN_BUDGET: Record<AIFeature, number> = {
   ingestion_normalization:     2_000,
   twin_model_generation:       8_000,
   causal_pattern_inference:    4_000,
+  activity_clustering:         4_000,
+  daily_reflection:            8_000,
+  health_analysis:             8_000,
 };
 
 export class RateLimitError extends Error {

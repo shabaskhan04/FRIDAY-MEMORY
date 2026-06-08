@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../lib/groq";
+import { getAIRouter } from "../lib/intelligence";
 import { createServiceClient } from "../lib/supabase";
 import type { HealthLog, HealthAnalysis, HealthLogRequestBody } from "@friday/shared";
 
@@ -83,7 +83,6 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health/analyze", async (_request, reply) => {
     try {
       const supabase = createServiceClient();
-      const groq = getGroqClient();
 
       const { data: logs, error } = await supabase
         .from("health_logs")
@@ -140,18 +139,12 @@ Return ONLY valid JSON — no markdown, no preamble:
 
       const logsJson = JSON.stringify(logs, null, 0);
 
-      const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        response_format: { type: "json_object" },
-        max_tokens: 1024,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Health logs (90 days):\n${logsJson}` },
-        ],
-      });
-
-      const raw = completion.choices[0]?.message?.content ?? "{}";
+      const raw = await getAIRouter().generate(
+        "health_analysis",
+        SYSTEM_PROMPT,
+        `Health logs (90 days):\n${logsJson}`,
+        { temperature: 0.2, maxTokens: 1024 }
+      );
       const cleaned = raw.replace(/```json|```/g, "").trim();
 
       let analysis: HealthAnalysis;

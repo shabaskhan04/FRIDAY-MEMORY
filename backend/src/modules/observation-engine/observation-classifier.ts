@@ -1,8 +1,9 @@
 // ============================================================
 // observation-classifier.ts — Rule-based multi-label classifier
-// No LLM calls. Pure lookup + keyword matching.
+// Rule #2, #3, #10
 // ============================================================
 import type { ObservationSource, ObservationCategory, ClassificationResult } from './observation.types';
+import type { AIRouter } from '../ai-engine/ai-router';
 
 // Source → primary category (deterministic)
 const SOURCE_CATEGORY: Record<ObservationSource, ObservationCategory> = {
@@ -56,45 +57,108 @@ const SECONDARY_CATEGORIES: Partial<Record<ObservationSource, ObservationCategor
   EMAIL_SENT:       ['SOCIAL'],
 };
 
-// Keyword → additional category hints derived from title/description
+// Keyword → additional category hints derived from title/description (fallback)
 const KEYWORD_HINTS: Array<{ keywords: RegExp; category: ObservationCategory }> = [
-  { keywords: /\b(orin|static|khan designs|chai|wedee|lxv)\b/i, category: 'PROJECT' },
-  { keywords: /\b(gym|workout|body fat|weight|calories|sleep|steps|health)\b/i, category: 'HEALTH' },
-  { keywords: /\b(revenue|invoice|payment|expense|profit|income|salary)\b/i, category: 'FINANCE' },
-  { keywords: /\b(course|tutorial|book|read|study|learn|lecture)\b/i, category: 'LEARNING' },
-  { keywords: /\b(meeting|call|nidha|client|friend|family|dinner)\b/i, category: 'SOCIAL' },
+  {
+    keywords: /\b(work|worked|working|works|job|jobs|office|employee|employees|colleague|colleagues|task|tasks|todo|todos|refactor|refactored|refactoring|integration|integrations|compiler|build|builds|dependency|dependencies|code|codes|coding|develop|developed|developing|development|programming|software|server|servers|deploy|deployed|deploying|deployment|api|apis|auth|router|routers|database|databases|query|queries|fix|fixed|fixing|bug|bugs|engineering|design|designs|gateway|gateways|classifier|classifiers|backend|frontend|interface|interfaces|component|components|wire|wired|wiring|resume|career|hiring|interview|contract|manager|scrum|sprint|jira|git|github|gitlab|pr|commit|merge|codebase|testing|test|unittest|qa|production|staging)\b/i,
+    category: 'WORK'
+  },
+  {
+    keywords: /\b(orin|static|khan designs|chai|wedee|lxv|friday|project|projects|milestone|milestones|launch|launched|launching|beta|ship|shipped|shipping|release|released|releasing|business|startup|pitch|venture|entrepreneur|strategy|marketing|sales|roadmap|timeline|deadline|deliverable|deliverables|mvp|product|features|epic|backlog)\b/i,
+    category: 'PROJECT'
+  },
+  {
+    keywords: /\b(gym|workout|workouts|body fat|weight|calories|sleep|steps|health|healthy|exercise|exercises|run|running|fitness|doctor|doctors|medical|medicine|medicines|diet|nutrition|clinic|hospital|physician|dentist|therapy|mental|meditation|yoga|cardio|training|sick|fever|pain|illness|symptoms|prescription|vitamins|supplement|supplements|stretching|hydration|water)\b/i,
+    category: 'HEALTH'
+  },
+  {
+    keywords: /\b(revenue|revenues|invoice|invoices|payment|payments|expense|expenses|profit|profits|income|salary|salaries|money|cost|costs|spend|spending|spent|price|prices|finance|finances|transaction|transactions|bank|banking|card|cards|crypto|paid|receipt|receipts|billing|subscription|buy|bought|purchase|purchases|purchased|tax|taxes|invest|investment|investing|stock|stocks|portfolio|cash|wallet|budget|budgeting)\b/i,
+    category: 'FINANCE'
+  },
+  {
+    keywords: /\b(course|tutorials|book|books|read|reading|reads|study|studying|learn|learned|learning|learns|lecture|lectures|class|classes|lesson|lessons|education|school|schools|university|college|colleges|exam|exams|research|researching|researched|tutorial|homework|assignment|assignments|syllabus|grade|grades|coursework|textbook|certification|degree|thesis|academic|journal|paper|papers|concept|concepts|skill|skills|workshop|webinar)\b/i,
+    category: 'LEARNING'
+  },
+  {
+    keywords: /\b(meeting|meetings|call|calls|nidha|client|clients|friend|friends|family|dinner|dinners|lunch|lunches|breakfast|breakfasts|party|parties|hangout|hangouts|chat|chats|social|meetup|meetups|relationship|relationships|date|dates|parents|brother|sister|wife|husband|girlfriend|boyfriend|spouse|cousin|cousins|talk|talked|talking|gathering|event|events|wedding|anniversary|birthday)\b/i,
+    category: 'SOCIAL'
+  },
+  {
+    keywords: /\b(system|systems|device|devices|os|windows|mac|linux|cpu|ram|storage|network|networks|wifi|internet|browser|browsers|chrome|firefox|safari|ide|editor|editors|reboot|restart|hardware|app|apps|install|installed|installing|update|updates|updating|configuration|settings|keyboard|mouse|monitor|screen|disk|memory|performance|process|processes|terminal|console|driver|drivers)\b/i,
+    category: 'SYSTEM'
+  },
+];
+
+// Priority of domains for selecting the primary category
+const PRIORITY_ORDER: ObservationCategory[] = [
+  'WORK',
+  'PROJECT',
+  'HEALTH',
+  'FINANCE',
+  'LEARNING',
+  'SOCIAL',
+  'SYSTEM',
 ];
 
 export class ObservationClassifier {
+  constructor(private readonly aiRouter?: AIRouter) {}
+
   classify(
     source: ObservationSource,
     title: string,
     description: string | null = null,
   ): ClassificationResult {
-    const primary = SOURCE_CATEGORY[source] ?? 'PERSONAL';
-    const categories = new Set<ObservationCategory>([primary]);
+    const matched = new Set<ObservationCategory>();
 
-    // Secondary from source type
-    for (const cat of SECONDARY_CATEGORIES[source] ?? []) {
-      categories.add(cat);
+    // 1. Add primary category from source
+    const sourceCat = SOURCE_CATEGORY[source];
+    if (sourceCat) {
+      matched.add(sourceCat);
     }
 
-    // Keyword hints from text
+    // 2. Add secondary categories from source
+    for (const cat of SECONDARY_CATEGORIES[source] ?? []) {
+      matched.add(cat);
+    }
+
+    // 3. Add matched categories from keywords
     const text = `${title} ${description ?? ''}`;
     for (const { keywords, category } of KEYWORD_HINTS) {
-      if (keywords.test(text)) categories.add(category);
+      if (keywords.test(text)) {
+        matched.add(category);
+      }
+    }
+
+    // Drop PERSONAL if any other category is matched
+    const hasOtherCategory = Array.from(matched).some(cat => cat !== 'PERSONAL');
+    if (hasOtherCategory) {
+      matched.delete('PERSONAL');
+    }
+
+    let primaryCategory: ObservationCategory;
+    let categoriesList: ObservationCategory[];
+
+    if (matched.size > 0) {
+      categoriesList = Array.from(matched);
+      const naturalCat = SOURCE_CATEGORY[source];
+      if (naturalCat && naturalCat !== 'PERSONAL' && matched.has(naturalCat)) {
+        primaryCategory = naturalCat;
+      } else {
+        primaryCategory = PRIORITY_ORDER.find(c => matched.has(c)) ?? categoriesList[0];
+      }
+    } else {
+      primaryCategory = 'PERSONAL';
+      categoriesList = ['PERSONAL'];
     }
 
     return {
-      categories:       Array.from(categories),
-      primary_category: primary,
-      confidence:       this.deriveConfidence(source, categories.size),
+      categories:       categoriesList,
+      primary_category: primaryCategory,
+      confidence:       this.deriveConfidence(source, categoriesList.length),
     };
   }
 
   private deriveConfidence(source: ObservationSource, labelCount: number): number {
-    // MANUAL observations have lower classification certainty (free-form text)
-    // Structured sources (git, health, finance) are high confidence
     const BASE: Partial<Record<ObservationSource, number>> = {
       GIT_COMMIT: 0.97, GIT_PR: 0.97, GIT_BRANCH: 0.95,
       HEALTH_UPDATE: 0.97,
@@ -104,7 +168,6 @@ export class ObservationClassifier {
       MANUAL: 0.70,
     };
     const base = BASE[source] ?? 0.80;
-    // Slight penalty per extra label (more labels = more ambiguity)
     return Math.max(0.5, base - (labelCount - 1) * 0.02);
   }
 }

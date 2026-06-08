@@ -19,11 +19,12 @@ export class CausalReasoningRepository {
       .maybeSingle();
 
     if (existing) {
+      const nextCount = p.occurrence_count !== undefined ? p.occurrence_count : (existing.occurrence_count + 1);
       const { data, error } = await this.db.from('causal_patterns').update({
-        occurrence_count: existing.occurrence_count + 1,
-        confidence:       Math.min(0.99, existing.confidence + 0.02),
-        last_seen_at:     new Date().toISOString(),
-        status:           existing.occurrence_count + 1 >= 3 ? 'CONFIRMED' : existing.status,
+        occurrence_count: nextCount,
+        confidence:       p.confidence !== undefined ? p.confidence : Math.min(0.99, existing.confidence + 0.02),
+        last_seen_at:     p.last_seen_at ?? new Date().toISOString(),
+        status:           p.status ?? (nextCount >= 3 ? 'CONFIRMED' : existing.status),
       }).eq('id', existing.id).select().single();
       if (error) throw error;
       return data;
@@ -79,5 +80,16 @@ export class CausalReasoningRepository {
       .select().eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
     if (error) throw error;
     return data ?? [];
+  }
+
+  async getNodeName(userId: string, nodeId: string): Promise<string> {
+    const { data, error } = await this.db
+      .from('graph_nodes')
+      .select('name')
+      .eq('user_id', userId)
+      .eq('id', nodeId)
+      .maybeSingle();
+    if (error || !data) return nodeId;
+    return data.name;
   }
 }

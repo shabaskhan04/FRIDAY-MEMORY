@@ -33,8 +33,74 @@ export class ObservationProcessor {
   ): Promise<Observation> {
     const validated = CreateObservationSchema.parse(raw);
 
+    // Populate source_node_id and target_node_id if missing in metadata but related_entities exists
+    const metadata = { ...(validated.metadata || {}) };
+    let sourceNodeId = metadata.source_node_id as string | undefined;
+    let targetNodeId = metadata.target_node_id as string | undefined;
+
+    if (!sourceNodeId || !targetNodeId) {
+      const related = validated.related_entities || [];
+      const db = (this.repo as any).db;
+      if (db && related.length > 0) {
+        try {
+          const { data: nodes } = await db
+            .from('graph_nodes')
+            .select('id, name')
+            .eq('user_id', validated.user_id)
+            .in('name', related)
+            .eq('is_archived', false);
+
+          if (nodes && nodes.length > 0) {
+            if (!sourceNodeId) {
+              sourceNodeId = nodes[0].id;
+            }
+            if (nodes.length > 1) {
+              if (!targetNodeId) {
+                targetNodeId = nodes[1].id;
+              }
+            } else {
+              // If the memory mentions only one entity, set target_node_id to the user's own "Self" node ("You")
+              const { data: existingSelf } = await db
+                .from('graph_nodes')
+                .select('id')
+                .eq('user_id', validated.user_id)
+                .eq('name', 'You')
+                .eq('node_type', 'PERSON')
+                .eq('is_archived', false)
+                .maybeSingle();
+
+              if (existingSelf) {
+                targetNodeId = existingSelf.id;
+              } else {
+                const { data: createdSelf } = await db
+                  .from('graph_nodes')
+                  .insert({
+                    user_id: validated.user_id,
+                    name: 'You',
+                    node_type: 'PERSON',
+                    aliases: ['Me', 'Self'],
+                    metadata: {},
+                  })
+                  .select('id')
+                  .single();
+
+                if (createdSelf) {
+                  targetNodeId = createdSelf.id;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("[ObservationProcessor] Failed to resolve graph nodes for metadata:", err);
+        }
+      }
+    }
+
+    if (sourceNodeId) metadata.source_node_id = sourceNodeId;
+    if (targetNodeId) metadata.target_node_id = targetNodeId;
+
     // 1. Classify
-    const classification = this.classifier.classify(
+    const classification = await this.classifier.classify(
       validated.source,
       validated.title,
       validated.description ?? null,
@@ -57,14 +123,32 @@ export class ObservationProcessor {
     );
 
     // 3. Persist with enriched fields
-    return this.repo.create({
+    const savedObs = await this.repo.create({
       ...validated,
+      metadata,
       categories:       validated.categories.length ? validated.categories : classification.categories,
       importance_score: validated.importance_score !== 0.5
         ? validated.importance_score  // caller override
         : scoring.final_score,
       confidence_score: Math.min(validated.confidence_score, classification.confidence),
     } as CreateObservationInput);
+
+    // 4. Trigger activity pipeline (async/non-blocking)
+    try {
+      const unprocessed = await this.repo.listUnprocessed(savedObs.user_id, 50);
+      if (unprocessed.length > 0) {
+        const { getActivityService } = await import('../../lib/intelligence');
+        const activityService = getActivityService();
+        await activityService.processObservations(savedObs.user_id, unprocessed);
+        for (const o of unprocessed) {
+          await this.repo.markProcessed(o.id, savedObs.user_id);
+        }
+      }
+    } catch (err) {
+      console.error("[ObservationProcessor] Failed to trigger activity clustering:", err);
+    }
+
+    return savedObs;
   }
 
   /**
@@ -98,7 +182,7 @@ export class ObservationProcessor {
     const obs = await this.repo.getById(id, userId);
     if (!obs) throw new Error(`Observation ${id} not found`);
 
-    const classification = this.classifier.classify(obs.source, obs.title, obs.description);
+    const classification = await this.classifier.classify(obs.source, obs.title, obs.description);
     const scoring = calculateImportanceScore(obs, {
       sourceFrequencyInWindow:   ctx.sourceFrequencyInWindow   ?? 1,
       entityImportanceScores:    ctx.entityImportanceScores    ?? [],

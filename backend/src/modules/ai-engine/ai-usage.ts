@@ -14,7 +14,10 @@ export type AIFeature =
   | 'batch_extraction'
   | 'ingestion_normalization'
   | 'twin_model_generation'
-  | 'causal_pattern_inference';
+  | 'causal_pattern_inference'
+  | 'activity_clustering'
+  | 'daily_reflection'
+  | 'health_analysis';
 
 export type AIProvider = 'groq' | 'openai';
 export type AIModel    = 'llama-3.1-8b-instant' | 'llama-3.3-70b-versatile' | 'text-embedding-3-small';

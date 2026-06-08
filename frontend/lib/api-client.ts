@@ -231,3 +231,70 @@ export async function getGoogleStatus(): Promise<{ connected: boolean }> {
 export function getGoogleConnectUrl(): string {
   return `${BASE_URL}/google/connect`;
 }
+
+// ── Digital Twin ───────────────────────────────────────────────
+
+export async function getDigitalTwinProfile(): Promise<any> {
+  return apiFetch<any>("/twin/profile");
+}
+
+export async function rebuildDigitalTwin(): Promise<any> {
+  return apiFetch<any>("/twin/rebuild", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+// ── Activities / Clusters ──────────────────────────────────────
+
+export async function getActivityClusters(limit = 50): Promise<any[]> {
+  return apiFetch<any[]>(`/activities?limit=${limit}`);
+}
+
+export async function getActivityTimeline(days = 7): Promise<any[]> {
+  return apiFetch<any[]>(`/activities/timeline?days=${days}`);
+}
+
+// ── Causal Reasoning ───────────────────────────────────────────
+
+export async function getCausalPatterns(): Promise<any[]> {
+  return apiFetch<any[]>("/causal/patterns");
+}
+
+// ── Decisions ──────────────────────────────────────────────────
+
+export async function getDecisions(): Promise<{ decisions: any[] }> {
+  return apiFetch<{ decisions: any[] }>("/decisions");
+}
+
+export async function createDecision(body: {
+  title: string;
+  description?: string;
+  decision_type?: string;
+  reasoning?: string;
+  expected_outcome?: string;
+  expected_success_probability?: number;
+  confidence_score?: number;
+  entity_node_ids?: string[];
+}): Promise<any> {
+  return apiFetch<any>("/decisions", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function evaluateDecision(
+  id: string,
+  body: {
+    success: boolean;
+    success_score?: number;
+    accuracy_score?: number;
+    lessons?: string[];
+    notes?: string;
+  }
+): Promise<any> {
+  return apiFetch<any>(`/decisions/${id}/evaluate`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

@@ -68,7 +68,8 @@ export async function memoryAskRoutes(app: FastifyInstance): Promise<void> {
       const { weights, entities } = analysis;
       const entityNames = entities.map((e) => e.name.toLowerCase());
 
-      const embeddingVec = await generateEmbedding(query);
+      const embeddingResult = await getAIRouter().embed(query);
+      const embeddingVec = embeddingResult[0];
       if (!embeddingVec) {
         return reply.code(500).send({ error: "Failed to generate query embedding." });
       }

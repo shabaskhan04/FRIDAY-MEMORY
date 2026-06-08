@@ -81,25 +81,53 @@ export class CausalService {
     const { user_id, source, entity_name, description } = observation;
 
     // Only create causal edges when we have two named entities to link
-    // For now handle the two clearest causal source types
-    const CAUSAL_SOURCES: Partial<Record<string, { strength: number; rel: CausalEdge['relationship_type'] }>> = {
+    const CAUSAL_SOURCES: Record<string, { strength: number; rel: CausalEdge['relationship_type'] }> = {
       GIT_COMMIT:     { strength: 0.7, rel: 'CONTRIBUTED_TO' },
       CALENDAR_EVENT: { strength: 0.6, rel: 'ENABLED' },
       HEALTH_UPDATE:  { strength: 0.65, rel: 'CONTRIBUTED_TO' },
+      MANUAL:         { strength: 0.75, rel: 'CONTRIBUTED_TO' },
+      EMAIL_SENT:     { strength: 0.6, rel: 'ENABLED' },
+      FILE_CHANGE:    { strength: 0.6, rel: 'CONTRIBUTED_TO' },
+      APP_USAGE:      { strength: 0.5, rel: 'ENABLED' },
     };
 
-    const config = CAUSAL_SOURCES[source.type];
-    if (!config || !entity_name) return;
+    const config = CAUSAL_SOURCES[source.type] ?? { strength: 0.7, rel: 'CONTRIBUTED_TO' };
+    if (!entity_name) return;
 
     // Look up matching source node id — if payload has source_node_id use it directly
     const sourceNodeId = (source.metadata?.source_node_id as string | undefined) ?? null;
     const targetNodeId = (source.metadata?.target_node_id as string | undefined) ?? null;
-    if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) return;
+
+    if (!sourceNodeId || !targetNodeId) {
+      console.warn(`[CausalService] Skipping causal edge creation: missing source_node_id (${sourceNodeId}) or target_node_id (${targetNodeId})`);
+      return;
+    }
+
+    if (sourceNodeId === targetNodeId) {
+      return;
+    }
+
+    let finalSourceNodeId = sourceNodeId;
+    let finalTargetNodeId = targetNodeId;
+
+    try {
+      const selfNodeId = typeof this.repo.getOrCreateSelfNode === 'function'
+        ? await this.repo.getOrCreateSelfNode(user_id)
+        : 'self-node-id';
+
+      if (selfNodeId && targetNodeId === selfNodeId) {
+        // Swap so "You" (selfNodeId) is always the source
+        finalSourceNodeId = selfNodeId;
+        finalTargetNodeId = sourceNodeId;
+      }
+    } catch (err) {
+      console.error("[CausalService] Failed to check Self node:", err);
+    }
 
     await this.repo.createCausalEdge({
       user_id,
-      source_node_id: sourceNodeId,
-      target_node_id: targetNodeId,
+      source_node_id: finalSourceNodeId,
+      target_node_id: finalTargetNodeId,
       relationship_type: config.rel,
       causal_strength: config.strength,
       confidence: 0.6,

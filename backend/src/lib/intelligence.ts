@@ -81,7 +81,7 @@ function build() {
 
   // ── Observation Engine ────────────────────────────────────
   const obsRepo       = new ObservationRepository(db);
-  const classifier    = new ObservationClassifier();
+  const classifier    = new ObservationClassifier(router);
   const processor     = new ObservationProcessor(obsRepo, classifier);
   const obsInsights   = new ObservationInsights(obsRepo);
   const obsTimeline   = new ObservationTimeline(obsRepo);
@@ -92,7 +92,7 @@ function build() {
   const correlator   = new CorrelationEngine();
   const actTimeline  = new TimelineEngine(actRepo);
   const actInsights  = new ActivityInsights(actRepo, actTimeline);
-  const activityService = new ActivityService(actRepo, correlator, actTimeline, actInsights);
+  const activityService = new ActivityService(actRepo, correlator, actTimeline, actInsights, router);
 
   // ── Review Engine ─────────────────────────────────────────
   const reviewService = new ReviewService(

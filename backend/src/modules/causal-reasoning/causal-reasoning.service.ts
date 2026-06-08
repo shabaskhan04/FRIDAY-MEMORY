@@ -37,14 +37,23 @@ export class CausalReasoningService {
     // 2. Promote strong causal edges (from existing causal-engine) to confirmed patterns
     for (const edge of edges) {
       if (edge.causal_strength >= 0.7 && edge.source_count >= MIN_OCCURRENCES_FOR_PATTERN) {
+        const causeLabel = typeof this.repo.getNodeName === 'function'
+          ? await this.repo.getNodeName(userId, edge.source_node_id)
+          : edge.source_node_id;
+        const effectLabel = typeof this.repo.getNodeName === 'function'
+          ? await this.repo.getNodeName(userId, edge.target_node_id)
+          : edge.target_node_id;
+
         const pattern = await this.repo.upsertPattern({
           user_id:          userId,
           pattern_type:     'REPEATED_SEQUENCE',
           cause_node_id:    edge.source_node_id,
-          cause_label:      edge.source_node_id,
+          cause_label:      causeLabel,
           effect_node_id:   edge.target_node_id,
-          effect_label:     edge.target_node_id,
-          description:      `${edge.relationship_type} with strength ${edge.causal_strength.toFixed(2)}`,
+          effect_label:     effectLabel,
+          description:      causeLabel === 'You'
+            ? (edge.relationship_type === 'ENABLED' ? `You enabled ${effectLabel}` : `You worked on ${effectLabel}`)
+            : `${causeLabel} leads to ${effectLabel} via ${edge.relationship_type}`,
           occurrence_count: edge.source_count,
           confidence:       edge.causal_strength,
           status:           'CONFIRMED',
@@ -55,7 +64,15 @@ export class CausalReasoningService {
       }
     }
 
+    // Discover and write goal blockers and accelerators
+    await this.findGoalBlockers(userId, true);
+    await this.findGoalAccelerators(userId, true);
+
     return discovered;
+  }
+
+  async getCausalPatterns(userId: string): Promise<CausalPattern[]> {
+    return this.repo.getPatterns(userId);
   }
 
   async scoreCausalConfidence(patternId: string, userId: string): Promise<number> {
@@ -65,60 +82,63 @@ export class CausalReasoningService {
     return Math.min(0.99, weightedSum / evidence.length);
   }
 
-  async findGoalBlockers(userId: string): Promise<CausalPattern[]> {
-    const patterns = await this.repo.getPatterns(userId, 'GOAL_BLOCKER');
-    // Also scan observations for declining goal-related activity
-    const obs = await this.obsRepo.listRecent(userId, 100);
-    const goalObs = obs.filter(o => o.categories?.includes('PROJECT') || o.categories?.includes('WORK'));
+  async findGoalBlockers(userId: string, writeToDb = true): Promise<CausalPattern[]> {
+    if (writeToDb) {
+      // Scan observations for declining goal-related activity
+      const obs = await this.obsRepo.listRecent(userId, 100);
+      const goalObs = obs.filter(o => o.categories?.includes('PROJECT') || o.categories?.includes('WORK'));
 
-    // Detect sources correlated with low activity on goals
-    const sourceCounts: Record<string, number> = {};
-    for (const o of goalObs) sourceCounts[o.source] = (sourceCounts[o.source] ?? 0) + 1;
+      // Detect sources correlated with low activity on goals
+      const sourceCounts: Record<string, number> = {};
+      for (const o of goalObs) sourceCounts[o.source] = (sourceCounts[o.source] ?? 0) + 1;
 
-    // Sources that appear rarely among productive observations = potential blockers
-    const rareThreshold = Math.max(1, goalObs.length * 0.1);
-    for (const [source, count] of Object.entries(sourceCounts)) {
-      if (count <= rareThreshold && count >= 2) {
-        await this.repo.upsertPattern({
-          user_id: userId, pattern_type: 'GOAL_BLOCKER',
-          cause_node_id: null, cause_label: source,
-          effect_node_id: null, effect_label: 'goal_progress',
-          description: `${source} correlates with reduced goal activity`,
-          occurrence_count: count, confidence: Math.min(0.7, count / goalObs.length + 0.3),
-          status: count >= 3 ? 'CONFIRMED' : 'CANDIDATE',
-          first_seen_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-        });
+      // Sources that appear rarely among productive observations = potential blockers
+      const rareThreshold = Math.max(1, goalObs.length * 0.1);
+      for (const [source, count] of Object.entries(sourceCounts)) {
+        if (count <= rareThreshold && count >= 2) {
+          await this.repo.upsertPattern({
+            user_id: userId, pattern_type: 'GOAL_BLOCKER',
+            cause_node_id: null, cause_label: source,
+            effect_node_id: null, effect_label: 'goal_progress',
+            description: `${source} correlates with reduced goal activity`,
+            occurrence_count: count, confidence: Math.min(0.7, count / goalObs.length + 0.3),
+            status: count >= 3 ? 'CONFIRMED' : 'CANDIDATE',
+            first_seen_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+          });
+        }
       }
     }
 
     return this.repo.getPatterns(userId, 'GOAL_BLOCKER');
   }
 
-  async findGoalAccelerators(userId: string): Promise<CausalPattern[]> {
-    const obs = await this.obsRepo.listRecent(userId, 100);
-    const goalObs = obs.filter(o => o.categories?.includes('PROJECT') || o.categories?.includes('WORK'));
+  async findGoalAccelerators(userId: string, writeToDb = true): Promise<CausalPattern[]> {
+    if (writeToDb) {
+      const obs = await this.obsRepo.listRecent(userId, 100);
+      const goalObs = obs.filter(o => o.categories?.includes('PROJECT') || o.categories?.includes('WORK'));
 
-    // High-importance observations on productive days = accelerators
-    const highImpactSources: Record<string, number> = {};
-    for (const o of goalObs) {
-      if (o.importance_score >= 0.7) {
-        highImpactSources[o.source] = (highImpactSources[o.source] ?? 0) + 1;
+      // High-importance observations on productive days = accelerators
+      const highImpactSources: Record<string, number> = {};
+      for (const o of goalObs) {
+        if (o.importance_score >= 0.7) {
+          highImpactSources[o.source] = (highImpactSources[o.source] ?? 0) + 1;
+        }
       }
-    }
 
-    for (const [source, count] of Object.entries(highImpactSources)) {
-      if (count >= MIN_OCCURRENCES_FOR_PATTERN) {
-        await this.repo.upsertPattern({
-          user_id: userId, pattern_type: 'GOAL_ACCELERATOR',
-          cause_node_id: null, cause_label: source,
-          effect_node_id: null, effect_label: 'goal_progress',
-          description: `${source} correlates with high-impact goal activity`,
-          occurrence_count: count, confidence: Math.min(0.85, count / Math.max(1, goalObs.length)),
-          status: count >= 3 ? 'CONFIRMED' : 'CANDIDATE',
-          first_seen_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-        });
+      for (const [source, count] of Object.entries(highImpactSources)) {
+        if (count >= MIN_OCCURRENCES_FOR_PATTERN) {
+          await this.repo.upsertPattern({
+            user_id: userId, pattern_type: 'GOAL_ACCELERATOR',
+            cause_node_id: null, cause_label: source,
+            effect_node_id: null, effect_label: 'goal_progress',
+            description: `${source} correlates with high-impact goal activity`,
+            occurrence_count: count, confidence: Math.min(0.85, count / Math.max(1, goalObs.length)),
+            status: count >= 3 ? 'CONFIRMED' : 'CANDIDATE',
+            first_seen_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+          });
+        }
       }
     }
 

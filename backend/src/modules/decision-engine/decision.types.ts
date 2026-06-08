@@ -58,6 +58,7 @@ export interface CreateDecisionInput {
   confidence_score?: number;
   decision_date?: string;
   review_date?: string;
+  entity_node_ids?: string[];
 }
 
 export interface UpdateDecisionInput {

@@ -47,6 +47,45 @@ export class DecisionEvaluationEngine {
     else if (input.success_score <= 0.3) statusUpdate.status = 'FAILED';
 
     await this.repo.update(decisionId, userId, statusUpdate as any);
+
+    // Learn causal patterns from successful decision outcomes (success_score >= 0.7)
+    try {
+      const entities = await this.repo.getDecisionEntities(decisionId);
+      if (input.success_score >= 0.7 && entities.length >= 2) {
+        const sourceNodeId = entities[0].node_id;
+        const targetNodeId = entities[1].node_id;
+
+        const { getCausalReasoningService } = await import('../../lib/intelligence');
+        const { CausalRepository } = await import('../causal-engine/causal.repository');
+        const { createServiceClient } = await import('../../lib/supabase');
+
+        const db = createServiceClient();
+        const causalRepo = new CausalRepository(db);
+
+        await causalRepo.createCausalEdge({
+          user_id: userId,
+          source_node_id: sourceNodeId,
+          target_node_id: targetNodeId,
+          relationship_type: 'CAUSED',
+          causal_strength: input.success_score,
+          confidence: accuracy_score,
+          evidence: [{
+            description: `Inferred from successful decision: "${decision.title}". Lessons: ${(input.lessons ?? []).join(", ")}`,
+            weight: input.success_score,
+            timestamp: new Date().toISOString()
+          }]
+        });
+
+        // Trigger updates in CausalReasoningService (discover new patterns)
+        const causalReasoningService = getCausalReasoningService();
+        causalReasoningService.discoverCausalPatterns(userId).catch(err => {
+          console.error('[DecisionEvaluationEngine] discoverCausalPatterns error:', err);
+        });
+      }
+    } catch (err) {
+      console.error('[DecisionEvaluationEngine] Causal edge generation failed:', err);
+    }
+
     return eval_;
   }
 

@@ -29,7 +29,7 @@ export async function generateWeeklySummary(): Promise<WeeklySummary> {
 
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 
-  const [rawRes, temporalRes, entityRes, todoRes] = await Promise.all([
+  const [rawRes, temporalRes, entityRes, todoRes, activityRes, causalRes, decisionRes] = await Promise.all([
     supabase
       .from("raw_ledgers")
       .select("id, content, created_at, intent_tag")
@@ -49,12 +49,31 @@ export async function generateWeeklySummary(): Promise<WeeklySummary> {
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("activities")
+      .select("title, category, duration_mins, started_at")
+      .gte("started_at", weekAgo)
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("causal_patterns")
+      .select("cause_label, effect_label, pattern_type, confidence, status")
+      .eq("status", "CONFIRMED")
+      .order("confidence", { ascending: false })
+      .limit(10),
+    supabase
+      .from("decisions")
+      .select("title, expected_outcome, status, confidence_score, decision_date")
+      .gte("decision_date", weekAgo)
+      .order("decision_date", { ascending: false }),
   ]);
 
   const rawMemories = rawRes.data ?? [];
   const temporalEvents = temporalRes.data ?? [];
   const allEntities = entityRes.data ?? [];
   const todos = todoRes.data ?? [];
+  const activities = activityRes.data ?? [];
+  const patterns = causalRes.data ?? [];
+  const decisions = decisionRes.data ?? [];
 
   // entity_ledger has no created_at — filter by raw_ledger_id membership in this week's memories
   const weekRawIds = new Set(rawMemories.map((m) => m.id as string));
@@ -105,11 +124,36 @@ export async function generateWeeklySummary(): Promise<WeeklySummary> {
           .map((t) => `- ${t.task_description}`)
           .join("\n");
 
+  const activityBlock =
+    activities.length === 0
+      ? ""
+      : "\n\nDAILY ACTIVITY CLUSTERS:\n" +
+        activities
+          .slice(0, 15)
+          .map((a) => `- [${a.category}] ${a.title} (${a.duration_mins} mins)`)
+          .join("\n");
+
+  const patternBlock =
+    patterns.length === 0
+      ? ""
+      : "\n\nCAUSAL INSIGHTS INFERRED:\n" +
+        patterns
+          .map((p) => `- ${p.cause_label} affects ${p.effect_label} (${p.pattern_type}, strength: ${p.confidence.toFixed(2)})`)
+          .join("\n");
+
+  const decisionBlock =
+    decisions.length === 0
+      ? ""
+      : "\n\nDECISIONS MADE/RESOLVED:\n" +
+        decisions
+          .map((d) => `- ${d.title} (Status: ${d.status}, Expected outcome: ${d.expected_outcome ?? "unknown"})`)
+          .join("\n");
+
   const prompt = `Week of ${new Date(weekAgo).toLocaleDateString("en-IN")} → ${new Date().toLocaleDateString("en-IN")}
 Total memories: ${rawMemories.length}
 
 MEMORIES:
-${memoriesBlock}${temporalBlock}${entityBlock}${todoBlock}`;
+${memoriesBlock}${temporalBlock}${entityBlock}${todoBlock}${activityBlock}${patternBlock}${decisionBlock}`;
 
   const raw = await getAIRouter().generate("weekly_review", SUMMARY_SYSTEM_PROMPT, prompt, {
     maxTokens: 1024,

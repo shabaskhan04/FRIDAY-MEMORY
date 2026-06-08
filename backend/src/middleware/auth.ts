@@ -19,7 +19,10 @@ export async function authMiddleware(
   }
 
   const authHeader = request.headers["authorization"] ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const apiKey = (request.headers["x-api-key"] as string) ?? "";
+
+  const token = bearerToken || apiKey;
 
   const valid =
     token.length > 0 &&

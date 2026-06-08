@@ -231,10 +231,17 @@ export function HealthView({ isConfigured }: HealthViewProps) {
 
       {/* ── AI Analysis Panel ── */}
       <div className="rounded-2xl glass-card overflow-hidden">
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setShowAnalysis(p => !p)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setShowAnalysis(p => !p);
+            }
+          }}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer select-none"
         >
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-xl bg-primary/15 flex items-center justify-center">
@@ -260,7 +267,7 @@ export function HealthView({ isConfigured }: HealthViewProps) {
               ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
               : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
           </div>
-        </button>
+        </div>
 
         {showAnalysis && (
           <div className="px-4 pb-4 space-y-4">

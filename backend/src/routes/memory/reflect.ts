@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../../lib/groq";
+import { getAIRouter } from "../../lib/intelligence";
 import { generateEmbedding, toVectorLiteral } from "../../lib/embeddings";
 import { createServiceClient } from "../../lib/supabase";
 import type { ReflectRequestBody, ReflectResponse } from "@friday/shared";
@@ -20,7 +20,6 @@ For each insight output a JSON object. Return ONLY a JSON array — no markdown,
  */
 export async function runReflection(hoursBack = 24): Promise<ReflectResponse> {
   const supabase = createServiceClient();
-  const groq = getGroqClient();
 
   const since = new Date(Date.now() - hoursBack * 3600 * 1000).toISOString();
 
@@ -39,17 +38,12 @@ export async function runReflection(hoursBack = 24): Promise<ReflectResponse> {
     .map((m) => `[${m.id}] (${m.intent_tag ?? "standard"}) ${m.content}`)
     .join("\n\n");
 
-  const completion = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    max_tokens: 1024,
-    temperature: 0.4,
-    messages: [
-      { role: "system", content: REFLECTION_SYSTEM_PROMPT },
-      { role: "user", content: `Memories from the last ${hoursBack}h:\n\n${memoryBlock}` },
-    ],
-  });
-
-  const raw = completion.choices[0]?.message?.content ?? "[]";
+  const raw = await getAIRouter().generate(
+    "daily_reflection",
+    REFLECTION_SYSTEM_PROMPT,
+    `Memories from the last ${hoursBack}h:\n\n${memoryBlock}`,
+    { temperature: 0.4, maxTokens: 1024 }
+  );
   const cleaned = raw.replace(/```json|```/g, "").trim();
 
   type InsightRaw = { type: string; content: string; source_memory_ids: string[] };

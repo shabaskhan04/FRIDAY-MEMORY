@@ -33,6 +33,8 @@ import { reviewRoutes } from "./routes/review";
 import { ingestionRoutes } from "./routes/ingestion";
 import { twinRoutes } from "./routes/twin";
 import { causalRoutes } from "./routes/causal";
+import { decisionsRoutes } from "./routes/decisions";
+import { activityRoutes } from "./routes/activity";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -51,19 +53,20 @@ async function build() {
   // ── Security ─────────────────────────────────────────────────
   await app.register(helmet, { contentSecurityPolicy: false });
 
+  const extraHeaders = process.env.NODE_ENV === 'production'
+    ? [] 
+    : ['x-api-key'];
+
   await app.register(cors, {
     origin: (origin, callback) => {
       const allowed = process.env.ALLOWED_ORIGIN ?? "http://localhost:3000";
       const allowList = allowed.split(",").map((s) => s.trim());
-
-      // Allow non-browser requests (curl, server-to-server, same-origin callbacks)
       if (!origin) return callback(null, true);
       if (allowList.includes(origin)) return callback(null, true);
-
       callback(new Error(`CORS: origin '${origin}' is not allowed.`), false);
     },
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", ...extraHeaders],
     credentials: true,
   });
 
@@ -101,6 +104,8 @@ async function build() {
   await app.register(ingestionRoutes);
   await app.register(twinRoutes);
   await app.register(causalRoutes);
+  await app.register(decisionsRoutes);
+  await app.register(activityRoutes);
 
   return app;
 }
