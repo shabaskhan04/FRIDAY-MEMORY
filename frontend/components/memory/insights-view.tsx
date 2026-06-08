@@ -1,6 +1,5 @@
 "use client";
 
-import { Cpu, Activity, GitBranch, CheckSquare } from "lucide-react";
 import { DigitalTwinCard } from "./digital-twin-card";
 import { ActivityCard } from "./activity-card";
 import { PatternCard } from "./pattern-card";

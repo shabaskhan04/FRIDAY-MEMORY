@@ -234,12 +234,34 @@ export function getGoogleConnectUrl(): string {
 
 // ── Digital Twin ───────────────────────────────────────────────
 
-export async function getDigitalTwinProfile(): Promise<any> {
-  return apiFetch<any>("/twin/profile");
+export type DigitalTwinProfileData = {
+  id?: string;
+  user_id?: string;
+  display_name?: string;
+  summary?: string;
+  risk_profile?: string;
+  productivity_peak?: string | null;
+  top_goals?: string[];
+  top_projects?: string[];
+  top_people?: string[];
+  avg_decision_confidence?: number;
+  version?: number;
+  last_rebuilt_at?: string | null;
+};
+
+export type SelfModel = {
+  profile: DigitalTwinProfileData;
+  traits: unknown[];
+  predictions: unknown[];
+  generated_at: string;
+};
+
+export async function getDigitalTwinProfile(): Promise<DigitalTwinProfileData> {
+  return apiFetch<DigitalTwinProfileData>("/twin/profile");
 }
 
-export async function rebuildDigitalTwin(): Promise<any> {
-  return apiFetch<any>("/twin/rebuild", {
+export async function rebuildDigitalTwin(): Promise<SelfModel> {
+  return apiFetch<SelfModel>("/twin/rebuild", {
     method: "POST",
     body: JSON.stringify({}),
   });
@@ -247,24 +269,59 @@ export async function rebuildDigitalTwin(): Promise<any> {
 
 // ── Activities / Clusters ──────────────────────────────────────
 
-export async function getActivityClusters(limit = 50): Promise<any[]> {
-  return apiFetch<any[]>(`/activities?limit=${limit}`);
+export type ActivityCluster = {
+  id: string;
+  title: string;
+  category: string;
+  started_at: string;
+  ended_at: string;
+  related_entities: string[];
+  importance_score: number;
+  signal_quality: number;
+};
+
+export async function getActivityClusters(limit = 50): Promise<ActivityCluster[]> {
+  return apiFetch<ActivityCluster[]>(`/activities?limit=${limit}`);
 }
 
-export async function getActivityTimeline(days = 7): Promise<any[]> {
-  return apiFetch<any[]>(`/activities/timeline?days=${days}`);
+export async function getActivityTimeline(days = 7): Promise<ActivityCluster[]> {
+  return apiFetch<ActivityCluster[]>(`/activities/timeline?days=${days}`);
 }
 
 // ── Causal Reasoning ───────────────────────────────────────────
 
-export async function getCausalPatterns(): Promise<any[]> {
-  return apiFetch<any[]>("/causal/patterns");
+export type CausalPattern = {
+  id: string;
+  pattern_type: string;
+  cause_label: string;
+  effect_label: string;
+  description: string;
+  occurrence_count: number;
+  confidence: number;
+  status: string;
+};
+
+export async function getCausalPatterns(): Promise<CausalPattern[]> {
+  return apiFetch<CausalPattern[]>("/causal/patterns");
 }
 
 // ── Decisions ──────────────────────────────────────────────────
 
-export async function getDecisions(): Promise<{ decisions: any[] }> {
-  return apiFetch<{ decisions: any[] }>("/decisions");
+export type DecisionRecord = {
+  id: string;
+  title: string;
+  description: string | null;
+  decision_type: string;
+  status: string;
+  confidence_score: number;
+  expected_success_probability: number;
+  success_score: number | null;
+  evaluated_at: string | null;
+  created_at: string;
+};
+
+export async function getDecisions(): Promise<{ decisions: DecisionRecord[] }> {
+  return apiFetch<{ decisions: DecisionRecord[] }>("/decisions");
 }
 
 export async function createDecision(body: {
@@ -276,8 +333,8 @@ export async function createDecision(body: {
   expected_success_probability?: number;
   confidence_score?: number;
   entity_node_ids?: string[];
-}): Promise<any> {
-  return apiFetch<any>("/decisions", {
+}): Promise<DecisionRecord> {
+  return apiFetch<DecisionRecord>("/decisions", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -292,8 +349,8 @@ export async function evaluateDecision(
     lessons?: string[];
     notes?: string;
   }
-): Promise<any> {
-  return apiFetch<any>(`/decisions/${id}/evaluate`, {
+): Promise<DecisionRecord> {
+  return apiFetch<DecisionRecord>(`/decisions/${id}/evaluate`, {
     method: "POST",
     body: JSON.stringify(body),
   });

@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { GitBranch, ArrowRight, Loader2, Award, ShieldAlert, Sparkles, TrendingUp } from "lucide-react";
-import { getCausalPatterns } from "@/lib/api-client";
-import { Badge } from "@/components/ui/badge";
+import { GitBranch, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { getCausalPatterns, type CausalPattern } from "@/lib/api-client";
 
 export function PatternCard() {
-  const [patterns, setPatterns] = useState<any[]>([]);
+  const [patterns, setPatterns] = useState<CausalPattern[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -58,8 +57,6 @@ export function PatternCard() {
       <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin">
         {patterns.map((pattern) => {
           const pct = Math.round(pattern.confidence * 100);
-          const isBlocker = pattern.pattern_type === "GOAL_BLOCKER";
-          const isAccelerator = pattern.pattern_type === "GOAL_ACCELERATOR";
 
           return (
             <div
@@ -90,7 +87,7 @@ export function PatternCard() {
               {/* Description & Confidence */}
               <div className="flex items-start justify-between gap-4 mt-2.5 pt-2 border-t border-border/5 text-xs">
                 <p className="text-muted-foreground leading-normal italic text-[11px] flex-1">
-                  "{pattern.description}"
+                  &quot;{pattern.description}&quot;
                 </p>
                 <div className="flex flex-col items-end shrink-0">
                   <div className="flex items-center gap-0.5 text-primary font-bold">

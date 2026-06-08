@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckSquare, ShieldCheck, HelpCircle, XCircle, Plus, Loader2, Sparkles, AlertCircle, FileText } from "lucide-react";
-import { getDecisions, createDecision, evaluateDecision } from "@/lib/api-client";
+import { CheckSquare, ShieldCheck, HelpCircle, Plus, Loader2 } from "lucide-react";
+import { getDecisions, createDecision, evaluateDecision, type DecisionRecord } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export function DecisionsPanel() {
-  const [decisions, setDecisions] = useState<any[]>([]);
+  const [decisions, setDecisions] = useState<DecisionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -35,12 +34,11 @@ export function DecisionsPanel() {
 
   const fetchDecisions = async () => {
     setIsLoading(true);
-    setError(null);
     try {
       const data = await getDecisions();
       setDecisions(data.decisions || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load decisions.");
+      console.error("Failed to load decisions:", err);
     } finally {
       setIsLoading(false);
     }

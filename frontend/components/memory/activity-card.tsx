@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Activity, Clock, Users, Calendar, Loader2, Sparkles } from "lucide-react";
-import { getActivityClusters } from "@/lib/api-client";
-import { Badge } from "@/components/ui/badge";
+import { getActivityClusters, type ActivityCluster } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const categoryStyles: Record<string, { bg: string; text: string; dot: string }> = {
@@ -18,7 +17,7 @@ const categoryStyles: Record<string, { bg: string; text: string; dot: string }> 
 };
 
 export function ActivityCard() {
-  const [activities, setActivities] = useState<any[]>([]);
+  const [activities, setActivities] = useState<ActivityCluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

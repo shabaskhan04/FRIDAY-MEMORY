@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Cpu, RefreshCw, Trophy, FolderGit, Users, ShieldAlert, Zap, Loader2 } from "lucide-react";
-import { getDigitalTwinProfile, rebuildDigitalTwin } from "@/lib/api-client";
+import { getDigitalTwinProfile, rebuildDigitalTwin, type DigitalTwinProfileData } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -62,7 +62,7 @@ function renderSummaryContent(summary: string) {
 }
 
 export function DigitalTwinCard() {
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<DigitalTwinProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRebuilding, setIsRebuilding] = useState(false);
 
@@ -144,7 +144,7 @@ export function DigitalTwinCard() {
 
       {/* Summary */}
       <div className="border-l-2 border-primary/30 pl-3 py-1 relative z-10">
-        {renderSummaryContent(profile.summary)}
+        {renderSummaryContent(profile.summary ?? "")}
       </div>
 
       {/* Stats Row */}
