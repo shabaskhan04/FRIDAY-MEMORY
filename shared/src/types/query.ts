@@ -12,7 +12,7 @@ export type QueryType =
 
 export interface DetectedEntity {
   name: string;
-  type: "PERSON" | "PROJECT";
+  type: "PERSON" | "PROJECT" | "GOAL" | "COMPANY" | "PLACE";
   confidence: number;
 }
 

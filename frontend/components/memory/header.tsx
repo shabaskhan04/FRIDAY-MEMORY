@@ -76,8 +76,7 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
     if (dbStats) return;
     setDbLoading(true);
     try {
-      const { createClient } = await import("@/lib/supabase");
-      const supabase = createClient();
+      const { supabase } = await import("@/lib/supabase-client");
       const [r1, r2, r3, r4] = await Promise.all([
         supabase.from("raw_ledgers").select("id, content", { count: "exact" }),
         supabase.from("entity_ledger").select("id, ledger_note", { count: "exact" }),
@@ -100,8 +99,7 @@ export function Header({ isOnline = true, pendingTodoCount = 0 }: HeaderProps) {
   const handlePrintMemory = async () => {
     setIsPrintLoading(true);
     try {
-      const { createClient } = await import("@/lib/supabase");
-      const supabase = createClient();
+      const { supabase } = await import("@/lib/supabase-client");
 
       const [rawRes, entityRes, todoRes] = await Promise.all([
         supabase

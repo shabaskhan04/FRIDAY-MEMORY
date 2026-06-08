@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Eye, EyeOff, Lock, Loader2 } from "lucide-react";
+import { verifyPassword } from "@/app/actions";
 import { cn } from "@/lib/utils";
 
 const SESSION_KEY = "friday_auth_session";
@@ -50,8 +51,8 @@ export function AuthGate({ children }: AuthGateProps) {
     // Small artificial delay so it feels like a real check
     await new Promise((r) => setTimeout(r, 400));
 
-    const correct = process.env.NEXT_PUBLIC_APP_PASSWORD ?? "friday";
-    if (password === correct) {
+    const correct = await verifyPassword(password);
+    if (correct) {
       setSession();
       setAuthed(true);
     } else {

@@ -94,14 +94,7 @@ export class AIRouter {
 
     const key = hashPrompt(systemPrompt, userPrompt);
     const cached = await getCached(this.db, key);
-    if (cached) {
-      recordUsageInMemory({
-        feature, provider: 'groq', model: L1_MODEL,
-        tokens_in: 0, tokens_out: 0, estimated_cost: 0,
-        cached: true, latency_ms: 0, timestamp: new Date().toISOString(),
-      });
-      return cached;
-    }
+    if (cached) return cached;
 
     const model    = L2_FEATURES.has(feature) ? L2_MODEL    : L1_MODEL;
     const provider = L2_FEATURES.has(feature) ? L2_PROVIDER : L1_PROVIDER;

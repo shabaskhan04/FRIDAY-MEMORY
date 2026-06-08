@@ -29,11 +29,10 @@ services:
     volumes:
       - ./backend/src:/app/src       # hot-reload source changes
       - ./shared/src:/app/shared/src # hot-reload shared changes
-    depends_on:
-      redis:
-        condition: service_healthy
     restart: "no"
 
+  # Redis is reserved for future use (event-bus pubsub, job queue).
+  # No TypeScript code uses it yet — the depends_on health check is intentionally removed.
   redis:
     image: redis:7-alpine
     ports:

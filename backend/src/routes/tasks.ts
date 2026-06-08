@@ -1,14 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../lib/groq";
 import {
   stageCalendarEvent,
   stageEmail,
   stageTask,
 } from "../lib/google-staging";
 import { getFridayUserId } from "../lib/supabase";
+import { getAIRouter } from "../lib/intelligence";
 
 interface TaskExecuteBody {
   query: string;
+  timezone?: string;
 }
 
 const TASK_SYSTEM_PROMPT = `You are Friday's action router. The user wants to DO something — classify their intent and extract payload.
@@ -30,25 +31,27 @@ Return ONLY valid JSON — no markdown, no extra keys:
 }
 
 Current date/time: {{NOW}}
-Timezone: Asia/Kolkata`;
+Timezone: {{TZ}}`;
 
 export async function tasksRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: TaskExecuteBody }>("/tasks/execute", async (request, reply) => {
-    const query = request.body.query?.trim() ?? "";
+    const query    = request.body.query?.trim() ?? "";
+    const timezone = request.body.timezone?.trim() || "UTC";
     if (!query) {
       return reply.code(400).send({ error: "query is required." });
     }
 
-    const groq = getGroqClient();
     const userId = getFridayUserId();
 
-    const now = new Date().toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
+    const now = new Date().toLocaleString("en-US", {
+      timeZone: timezone,
       dateStyle: "full",
       timeStyle: "short",
     });
 
-    const systemPrompt = TASK_SYSTEM_PROMPT.replace("{{NOW}}", now);
+    const systemPrompt = TASK_SYSTEM_PROMPT
+      .replace("{{NOW}}", now)
+      .replace("{{TZ}}", timezone);
 
     let parsed: {
       tool: string;
@@ -58,22 +61,16 @@ export async function tasksRoutes(app: FastifyInstance): Promise<void> {
     };
 
     try {
-      const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        response_format: { type: "json_object" },
-        max_tokens: 512,
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: query },
-        ],
-      });
-
-      const raw = completion.choices[0]?.message?.content ?? "{}";
+      const raw = await getAIRouter().generate(
+        "command_parse",
+        systemPrompt,
+        query,
+        { temperature: 0.1, maxTokens: 512 },
+      );
       parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as typeof parsed;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Task classification failed.";
-      console.error("[tasks/execute] Groq error:", err);
+      console.error("[tasks/execute] AIRouter error:", err);
       return reply.code(502).send({ error: message });
     }
 

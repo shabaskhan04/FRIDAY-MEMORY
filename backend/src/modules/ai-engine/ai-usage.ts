@@ -17,7 +17,8 @@ export type AIFeature =
   | 'causal_pattern_inference'
   | 'activity_clustering'
   | 'daily_reflection'
-  | 'health_analysis';
+  | 'health_analysis'
+  | 'command_parse';
 
 export type AIProvider = 'groq' | 'openai';
 export type AIModel    = 'llama-3.1-8b-instant' | 'llama-3.3-70b-versatile' | 'text-embedding-3-small';

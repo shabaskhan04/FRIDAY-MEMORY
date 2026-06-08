@@ -7,6 +7,8 @@
  * Also safe to run manually: npx tsx src/workers/reflect.worker.ts
  */
 import { runReflection } from "../routes/memory/reflect";
+import { getObservationService } from "../lib/intelligence";
+import { getFridayUserId } from "../lib/supabase";
 
 // Ensure env is loaded when run directly
 import "dotenv/config";
@@ -16,6 +18,10 @@ async function main(): Promise<void> {
   console.log(`[reflect.worker] Starting — analysing last ${hoursBack}h of memories…`);
 
   try {
+    // Drain any observations that were saved but never processed
+    const drained = await getObservationService().drainUnprocessed(getFridayUserId());
+    if (drained > 0) console.log(`[reflect.worker] Drained ${drained} unprocessed observations.`);
+
     const result = await runReflection(hoursBack);
 
     if (result.status === "ok") {

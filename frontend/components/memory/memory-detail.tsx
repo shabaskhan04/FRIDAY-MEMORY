@@ -76,8 +76,7 @@ export function MemoryDetailPanel({ memoryId, onClose }: MemoryDetailPanelProps)
       setIsLoading(true);
       setError(null);
       try {
-        const { createClient } = await import("@/lib/supabase");
-        const supabase = createClient();
+        const { supabase } = await import("@/lib/supabase-client");
 
         // Fetch base memory
         const { data: memory, error: memError } = await supabase

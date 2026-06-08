@@ -10,7 +10,7 @@ import {
   type TaskPayload,
 } from "../../lib/google-staging";
 import { createServiceClient, getFridayUserId } from "../../lib/supabase";
-import { getGroqClient } from "../../lib/groq";
+import { getAIRouter } from "../../lib/intelligence";
 import type { PendingCommand, ToolName } from "@friday/shared";
 
 const GMAIL_PROMPT = `Extract email fields from the user's natural language input.
@@ -27,7 +27,7 @@ Schema:
 const CALENDAR_PROMPT = `Extract calendar event fields from the user's natural language input.
 Return ONLY valid JSON, no markdown, no explanation.
 Convert any relative times (tomorrow, next Monday, 3pm) to ISO 8601 format.
-Assume timezone Asia/Kolkata if not specified. If endTime is not mentioned, omit it.
+If endTime is not mentioned, omit it.
 Schema:
 {
   "title": "event title",
@@ -37,28 +37,22 @@ Schema:
   "location": "optional location"
 }`;
 
-async function parseWithGroq(
+async function parseWithAI(
   systemPrompt: string,
-  content: string
+  content: string,
+  timezone: string,
 ): Promise<Record<string, string>> {
-  const groq = getGroqClient();
   const now = new Date().toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
+    timeZone: timezone,
     dateStyle: "full",
     timeStyle: "short",
   });
-
-  const completion = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    max_tokens: 400,
-    temperature: 0.1,
-    messages: [
-      { role: "system", content: `${systemPrompt}\n\nCurrent date/time: ${now}` },
-      { role: "user", content },
-    ],
-  });
-
-  const raw = completion.choices[0]?.message?.content ?? "{}";
+  const raw = await getAIRouter().generate(
+    "command_parse",
+    `${systemPrompt}\n\nCurrent date/time: ${now}\nTimezone: ${timezone}`,
+    content,
+    { temperature: 0.1, maxTokens: 400 },
+  );
   return JSON.parse(raw.replace(/```json|```/g, "").trim()) as Record<string, string>;
 }
 
@@ -76,11 +70,9 @@ async function executeCalendarInsert(payload: CalendarPayload): Promise<void> {
       description: payload.description ?? undefined,
       start: {
         dateTime: payload.startTime,
-        timeZone: "Asia/Kolkata",
       },
       end: {
         dateTime: payload.endTime ?? payload.startTime,
-        timeZone: "Asia/Kolkata",
       },
     },
   });
@@ -186,10 +178,10 @@ export async function commandsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Stage: parse (NL → structured → stage)
-  app.post<{ Body: { mode: "gmail" | "calendar" | "task"; content: string } }>(
+  app.post<{ Body: { mode: "gmail" | "calendar" | "task"; content: string; timezone?: string } }>(
     "/commands/stage/parse",
     async (request, reply) => {
-      const { mode, content } = request.body;
+      const { mode, content, timezone = "UTC" } = request.body;
       if (!content?.trim()) return reply.code(400).send({ error: "content is required." });
       if (!["gmail", "calendar", "task"].includes(mode))
         return reply.code(400).send({ error: "Invalid mode." });
@@ -202,7 +194,7 @@ export async function commandsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       if (mode === "gmail") {
-        const fields = await parseWithGroq(GMAIL_PROMPT, content);
+        const fields = await parseWithAI(GMAIL_PROMPT, content, timezone);
         if (!fields.to || !fields.subject || !fields.body) {
           return reply.code(422).send({
             error: "Could not extract to, subject, and body. Try being more specific.",
@@ -218,7 +210,7 @@ export async function commandsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       if (mode === "calendar") {
-        const fields = await parseWithGroq(CALENDAR_PROMPT, content);
+        const fields = await parseWithAI(CALENDAR_PROMPT, content, timezone);
         if (!fields.title || !fields.startTime) {
           return reply.code(422).send({
             error: "Could not extract a title and time. Try being more specific.",

@@ -1,16 +1,10 @@
 /**
  * Friday API Client
  *
- * All calls from the Next.js frontend to the DigitalOcean backend
- * go through this module. It reads two env vars:
- *
- *   NEXT_PUBLIC_FRIDAY_API_URL    - e.g. https://api.friday.yourdomain.com
- *   NEXT_PUBLIC_FRIDAY_API_SECRET - shared bearer token
- *
- * Both vars are NEXT_PUBLIC so they're available on the client.
- * The secret is not truly sensitive here because this is a single-user
- * personal app protected by the password gate — treat it like an API key
- * for a private service rather than a per-user credential.
+ * All backend calls are routed through /api/proxy so that FRIDAY_API_SECRET
+ * stays server-side and is never bundled into the browser JS bundle.
+ * The proxy route (app/api/proxy/[...path]/route.ts) forwards requests to
+ * FRIDAY_API_URL and injects the Authorization header server-side.
  */
 
 import type {
@@ -37,10 +31,7 @@ import type {
 
 export type { WeeklySummary } from "@friday/shared";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_FRIDAY_API_URL ?? "http://localhost:3001";
-const API_SECRET =
-  process.env.NEXT_PUBLIC_FRIDAY_API_SECRET ?? "";
+const BASE_URL = "/api/proxy";
 
 // ── Internal fetch wrapper ─────────────────────────────────────
 
@@ -52,7 +43,6 @@ async function apiFetch<T>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${API_SECRET}`,
     ...(options.headers as Record<string, string>),
   };
 
@@ -184,7 +174,10 @@ export async function stageParse(
 ): Promise<StageResponse> {
   return apiFetch<StageResponse>("/commands/stage/parse", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      ...body,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
   });
 }
 
@@ -213,7 +206,10 @@ export async function executeNLTask(query: string) {
     "/tasks/execute",
     {
       method: "POST",
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({
+        query,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
     }
   );
 }
@@ -226,10 +222,11 @@ export async function getGoogleStatus(): Promise<{ connected: boolean }> {
 
 /**
  * Redirect user's browser to the backend Google OAuth flow.
- * Called from a link/button, not fetch.
+ * Must go directly to the backend (not via proxy) since it's a redirect.
  */
 export function getGoogleConnectUrl(): string {
-  return `${BASE_URL}/google/connect`;
+  const backendUrl = process.env.NEXT_PUBLIC_FRIDAY_API_URL ?? "http://localhost:3001";
+  return `${backendUrl}/google/connect`;
 }
 
 // ── Digital Twin ───────────────────────────────────────────────

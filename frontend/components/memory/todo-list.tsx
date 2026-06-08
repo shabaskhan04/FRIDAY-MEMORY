@@ -64,8 +64,7 @@ export function TodoList({ todos: propTodos, onTodoToggle }: TodoListProps) {
       setErrorIds((prev) => { const m = new Map(prev); m.delete(todo.id); return m; });
 
       try {
-        const { createClient } = await import("@/lib/supabase");
-        const supabase = createClient();
+        const { supabase } = await import("@/lib/supabase-client");
         const { error } = await supabase
           .from("todo_tasks")
           .update({ status: "done" })

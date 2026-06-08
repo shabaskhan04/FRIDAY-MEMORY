@@ -30,8 +30,7 @@ export function StatsRow({ isConfigured, isProcessing, refreshTrigger = 0 }: Sta
 
     const fetchStats = async () => {
       try {
-        const { createClient } = await import("@/lib/supabase");
-        const supabase = createClient();
+        const { supabase } = await import("@/lib/supabase-client");
         const { data, error } = await supabase
           .from("raw_ledgers")
           .select("created_at")
@@ -43,7 +42,7 @@ export function StatsRow({ isConfigured, isProcessing, refreshTrigger = 0 }: Sta
 
         // Build set of LOCAL dates that have at least 1 entry
         const datesWithEntries = new Set(
-          data.map((r) => toLocalDateStr(r.created_at as string))
+          data.map((r: { created_at: string }) => toLocalDateStr(r.created_at))
         );
 
         // Calculate streak: walk backwards from today in local time

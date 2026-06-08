@@ -20,6 +20,7 @@ const DAILY_LIMITS: Record<AIFeature, number> = {
   activity_clustering:         100,
   daily_reflection:            5,
   health_analysis:             10,
+  command_parse:               200,
 };
 
 // Hard token budget per call (Rule #6)
@@ -37,6 +38,7 @@ export const TOKEN_BUDGET: Record<AIFeature, number> = {
   activity_clustering:         4_000,
   daily_reflection:            8_000,
   health_analysis:             8_000,
+  command_parse:               1_000,
 };
 
 export class RateLimitError extends Error {

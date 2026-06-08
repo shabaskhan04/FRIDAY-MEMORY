@@ -17,23 +17,38 @@ const TIMELINE_SIGNALS    = ["when did", "timeline", "history", "over time", "la
 async function detectEntities(query: string, supabase: SupabaseClient): Promise<DetectedEntity[]> {
   const lower = query.toLowerCase();
 
-  const { data } = await supabase
+  // Join entity_ledger with graph_nodes to get real node types
+  const { data: ledgerRows } = await supabase
     .from("entity_ledger")
     .select("name")
     .order("name");
 
-  if (!data) return [];
+  const { data: nodeRows } = await supabase
+    .from("graph_nodes")
+    .select("name, node_type")
+    .eq("is_archived", false);
+
+  const nodeTypeMap = new Map<string, string>();
+  for (const row of (nodeRows ?? []) as { name: string; node_type: string }[]) {
+    nodeTypeMap.set(row.name.toLowerCase(), row.node_type);
+  }
+
+  if (!ledgerRows) return [];
 
   const seen = new Set<string>();
   const entities: DetectedEntity[] = [];
 
-  for (const row of data as { name: string }[]) {
+  for (const row of ledgerRows as { name: string }[]) {
     const nameLower = row.name.toLowerCase();
     if (seen.has(nameLower)) continue;
     seen.add(nameLower);
 
     if (lower.includes(nameLower)) {
-      entities.push({ name: row.name, type: "PERSON", confidence: 1.0 });
+      const rawType = nodeTypeMap.get(nameLower) ?? "PERSON";
+      const type = (["PERSON", "PROJECT", "GOAL", "COMPANY", "PLACE"].includes(rawType)
+        ? rawType
+        : "PERSON") as DetectedEntity["type"];
+      entities.push({ name: row.name, type, confidence: 1.0 });
     }
   }
 
@@ -47,7 +62,11 @@ async function detectEntities(query: string, supabase: SupabaseClient): Promise<
     ) {
       const wl = w.toLowerCase();
       if (!entities.some((e) => e.name.toLowerCase() === wl)) {
-        entities.push({ name: w, type: "PERSON", confidence: 0.5 });
+        const rawType = nodeTypeMap.get(wl) ?? "PERSON";
+        const type = (["PERSON", "PROJECT", "GOAL", "COMPANY", "PLACE"].includes(rawType)
+          ? rawType
+          : "PERSON") as DetectedEntity["type"];
+        entities.push({ name: w, type, confidence: 0.5 });
       }
     }
   }
@@ -60,7 +79,10 @@ function classifyQuery(query: string, entities: DetectedEntity[]): QueryType {
   if (REFLECTION_SIGNALS.some((s) => lower.includes(s))) return "REFLECTION";
   if (ADVICE_SIGNALS.some((s) => lower.includes(s)))      return "ADVICE";
   if (TIMELINE_SIGNALS.some((s) => lower.includes(s)))    return "TIMELINE";
-  const hasPerson = entities.some((e) => e.type === "PERSON" && e.confidence >= 0.9);
+  const hasPerson  = entities.some((e) => e.type === "PERSON"  && e.confidence >= 0.9);
+  const hasProject = entities.some((e) => e.type === "PROJECT" && e.confidence >= 0.9);
+  const hasGoal    = entities.some((e) => e.type === "GOAL"    && e.confidence >= 0.9);
+  if (hasProject || hasGoal) return "PROJECT_SEARCH";
   if (hasPerson) return "PERSON_SEARCH";
   return "FACT_LOOKUP";
 }

@@ -18,6 +18,7 @@ const TTL: Record<AIFeature, number> = {
   ingestion_normalization:     1000 * 60 * 60 * 6,
   twin_model_generation:       1000 * 60 * 60 * 24,
   causal_pattern_inference:    1000 * 60 * 60 * 6,
+  command_parse:               0,  // no caching — commands are time-sensitive
   activity_clustering:         1000 * 60 * 60 * 1,
   daily_reflection:            1000 * 60 * 60 * 24,
   health_analysis:             1000 * 60 * 60 * 24,

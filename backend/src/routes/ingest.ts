@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { getGroqClient } from "../lib/groq";
 import { generateEmbedding } from "../lib/embeddings";
 import { createServiceClient, getFridayUserId } from "../lib/supabase";
-import { getGraphService, getActivityService, getAIRouter } from "../lib/intelligence";
+import { getGraphService, getAIRouter } from "../lib/intelligence";
 import type {
   IngestRequestBody,
   IngestResponse,
@@ -76,7 +75,6 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     const locationLon = typeof body.location_lon === "number" ? body.location_lon : null;
 
     const supabase = createServiceClient();
-    const groq = getGroqClient();
 
     // Run Groq extraction and embedding concurrently via AIRouter gateway
     let groqRawJson: string;
@@ -245,6 +243,14 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
       graph_ingested = true;
     } catch (err) {
       console.error("[ingest] graph ingest error:", err);
+      // Log to graph_ingestion_failures for later replay
+      supabase.from("graph_ingestion_failures").insert({
+        raw_ledger_id: rawLedgerId,
+        error_message: err instanceof Error ? err.message : String(err),
+        content_snippet: content.slice(0, 200),
+      }).then(({ error: dbErr }) => {
+        if (dbErr) console.error("[ingest] failed to log graph failure:", dbErr);
+      });
     }
 
     // Dynamic import to avoid circular dependency
