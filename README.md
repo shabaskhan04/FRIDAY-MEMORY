@@ -13,6 +13,7 @@ Capture thoughts, tasks, people, and health signals. FRIDAY extracts the structu
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20pgvector-3ECF8E?logo=supabase&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-installable-8B5CF6)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 <img src="frontend/public/screenshots/friday-wide.png" alt="FRIDAY insights dashboard" width="800" />
 
@@ -303,7 +304,7 @@ Issues and pull requests are welcome. For larger changes, please open an issue f
 
 ## License
 
-No license has been specified yet. Add a `LICENSE` file (for example MIT) and update this section before publishing.
+Released under the [MIT License](LICENSE).
 
 ---
 
